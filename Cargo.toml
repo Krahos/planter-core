@@ -7,14 +7,19 @@ edition = "2024"
 path = "src/lib.rs"
 
 [dependencies]
+chrono = "0.4.40"
+phonenumber = "0.3.7"
+serde-email = "3.1.0"
+thiserror = "2.0.12"
 
+[dev-dependencies]
+proptest = { version = "1.6.0", features = ["proptest-macro"] }
 
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"
 
 [lints.clippy]
-
 unwrap_in_result = "warn"
 unwrap_used = "warn"
 expect_used = "warn"
