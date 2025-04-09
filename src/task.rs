@@ -5,8 +5,8 @@ use chrono::{DateTime, Utc};
 /// A task is a unit of work that can be completed by a person or a group of people.
 /// It can be assigned resources and can have a start, finish, and duration.
 pub struct Task {
-    /// The title of the task.
-    title: String,
+    /// The name of the task.
+    name: String,
     /// The description of the task.
     description: String,
     /// Whether the task is completed.
@@ -22,15 +22,15 @@ pub struct Task {
 }
 
 impl Task {
-    /// Creates a new task with the given title.
+    /// Creates a new task with the given name.
     ///
     /// # Arguments
     ///
-    /// * `title` - The title of the task.
+    /// * `name` - The name of the task.
     ///
     /// # Returns
     ///
-    /// A new task with the given title.
+    /// A new task with the given name.
     ///
     /// # Example
     ///
@@ -38,11 +38,11 @@ impl Task {
     /// use planter_core::task::Task;
     ///
     /// let task = Task::new("Become world leader".to_string());
-    /// assert_eq!(task.title(), "Become world leader");
+    /// assert_eq!(task.name(), "Become world leader");
     /// ```
-    pub fn new(title: String) -> Self {
+    pub fn new(name: String) -> Self {
         Task {
-            title,
+            name,
             description: String::new(),
             completed: false,
             start: None,
@@ -250,7 +250,11 @@ impl Task {
         &self.resources
     }
 
-    /// Returns the title of the task.
+    /// Edits the name of the task.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The new name of the task.
     ///
     /// # Example
     ///
@@ -258,10 +262,25 @@ impl Task {
     /// use planter_core::task::Task;
     ///
     /// let mut task = Task::new("Become world leader".to_string());
-    /// assert_eq!(task.title(), "Become world leader");
+    /// task.edit_name("Become world boss".to_string());
+    /// assert_eq!(task.name(), "Become world boss");
     /// ```
-    pub fn title(&self) -> &str {
-        &self.title
+    pub fn edit_name(&mut self, name: String) {
+        self.name = name;
+    }
+
+    /// Returns the name of the task.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use planter_core::task::Task;
+    ///
+    /// let mut task = Task::new("Become world leader".to_string());
+    /// assert_eq!(task.name(), "Become world leader");
+    /// ```
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
     /// Edits the description of the task.
@@ -307,7 +326,7 @@ impl Task {
     ///
     /// let mut task = Task::new("Become world leader".to_string());
     /// assert!(!task.completed());
-    /// task.mark_completed();
+    /// task.toggle_completed();
     /// assert!(task.completed());
     /// ```
     pub fn completed(&self) -> bool {
@@ -323,11 +342,13 @@ impl Task {
     ///
     /// let mut task = Task::new("Become world leader".to_string());
     /// assert!(!task.completed());
-    /// task.mark_completed();
+    /// task.toggle_completed();
     /// assert!(task.completed());
+    /// task.toggle_completed();
+    /// assert!(!task.completed());
     /// ```
-    pub fn mark_completed(&mut self) {
-        self.completed = true;
+    pub fn toggle_completed(&mut self) {
+        self.completed = !self.completed;
     }
 
     /// Returns the duration of the task. It's None by default.

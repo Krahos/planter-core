@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 
 use crate::{resources::Resource, stakeholders::Stakeholder, task::Task};
 
+#[derive(Debug, Default)]
 /// Represents a project with a name and a list of resources.
 pub struct Project {
     /// The name of the project.
@@ -116,6 +117,15 @@ impl Project {
         self.description.as_deref()
     }
 
+    pub fn with_task(mut self, task: Task) -> Self {
+        self.tasks.push(task);
+        self
+    }
+
+    pub fn with_tasks(self, tasks: impl IntoIterator<Item = Task>) -> Self {
+        tasks.into_iter().fold(self, Self::with_task)
+    }
+
     /// Adds a task to the project.
     ///
     /// # Arguments
@@ -149,6 +159,21 @@ impl Project {
     /// ```
     pub fn tasks(&self) -> &Vec<Task> {
         &self.tasks
+    }
+
+    /// Returns a mutable reference to the tasks of the project.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use planter_core::{project::Project, task::Task};
+    ///
+    /// let mut project = Project::new("World domination".to_string());
+    /// project.add_task(Task::new("Become world leader".to_string()));
+    /// assert_eq!(project.tasks().len(), 1);
+    /// ```
+    pub fn tasks_mut(&mut self) -> &mut Vec<Task> {
+        &mut self.tasks
     }
 
     /// Returns the start date of the project.

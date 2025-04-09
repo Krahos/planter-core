@@ -1,5 +1,6 @@
 use crate::person::Person;
 
+#[derive(Debug)]
 /// Stakeholders are all those individuals, organizations or entities who have an interest in the project.
 /// Their interest could be constructive or destructive.
 pub enum Stakeholder {
