@@ -1,7 +1,7 @@
 use phonenumber::PhoneNumber;
 use serde_email::Email;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 /// Represents a person with a name and contact information.
 pub struct Person {
     /// The name of the person.

@@ -98,7 +98,8 @@ impl Deref for PositiveDuration {
 }
 
 #[cfg(test)]
-mod test_utils {
+/// Utilities to run tests with duration.
+pub mod test_utils {
     use proptest::prelude::Strategy;
 
     /// Generate a random duration string.

@@ -5,7 +5,7 @@
 use chrono::Utc;
 use planter_core::{
     person::{Name, Person},
-    project::Project,
+    project::{Project, TaskRelationship},
     resources::{Consumable, Material, NonConsumable, Resource},
     stakeholders::Stakeholder,
     task::Task,
@@ -26,7 +26,12 @@ fn test_project() {
     // Add tasks to the project
     project.add_task(Task::new("Become world leader".to_string()));
     project.add_task(Task::new("Profit".to_string()));
-    assert_eq!(project.tasks().len(), 2);
+    assert_eq!(project.tasks().count(), 2);
+
+    // Add relationships between tasks of the project.
+    project
+        .add_relationship(0, 1, TaskRelationship::StartToFinish)
+        .expect("Tasks to exist and circular dependencies not present");
 
     // Add a non consumable material to the project
     project.add_resource(Resource::Material(Material::NonConsumable(

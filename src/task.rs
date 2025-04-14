@@ -1,7 +1,7 @@
 use crate::{duration::PositiveDuration, resources::Resource};
 use chrono::{DateTime, Utc};
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 /// A task is a unit of work that can be completed by a person or a group of people.
 /// It can be assigned resources and can have a start, finish, and duration.
 pub struct Task {
@@ -367,6 +367,19 @@ impl Task {
     /// ```
     pub fn duration(&self) -> Option<PositiveDuration> {
         self.duration
+    }
+}
+
+#[cfg(test)]
+/// Utilities to test Tasks.
+pub mod test_utils {
+    use proptest::prelude::*;
+
+    use super::Task;
+
+    /// Generates an empty task with a random name.
+    pub fn task_strategy() -> impl Strategy<Value = Task> {
+        ".*".prop_map(|n| Task::new(n))
     }
 }
 

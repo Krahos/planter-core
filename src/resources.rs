@@ -1,6 +1,6 @@
 use crate::person::Person;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 /// Represents a resource that can be used in a project. A resource can be either a material or personnel.
 pub enum Resource {
     /// Represents a material resource that can be used in a project.
@@ -14,7 +14,7 @@ pub enum Resource {
     },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 /// Represents a material resource that can be used in a project.
 /// It can be either consumable or non-consumable.
 pub enum Material {
@@ -24,7 +24,7 @@ pub enum Material {
     NonConsumable(NonConsumable),
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 /// Represents a consumable material resource that can be used in a project.
 pub struct Consumable {
     /// Name of the consumable material.
@@ -35,7 +35,7 @@ pub struct Consumable {
     cost_per_unit: Option<u16>,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 /// Represents a non-consumable material resource that can be used in a project.
 pub struct NonConsumable {
     /// Name of the non-consumable material.
