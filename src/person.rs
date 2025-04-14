@@ -41,7 +41,7 @@ impl Person {
     /// ```
     /// use planter_core::person::{Person, Name};
     ///
-    /// let name = Name::parse("Margherita".to_string(), "Hack".to_string()).unwrap();
+    /// let name = Name::parse("Margherita".to_owned(), "Hack".to_owned()).unwrap();
     /// let person = Person::new(name);
     /// ```
     pub fn new(name: Name) -> Self {
@@ -65,7 +65,7 @@ impl Person {
     /// use serde_email::Email;
     /// use std::str::FromStr;
     ///
-    /// let name = Name::parse("Margherita".to_string(), "Hack".to_string()).unwrap();
+    /// let name = Name::parse("Margherita".to_owned(), "Hack".to_owned()).unwrap();
     /// let mut person = Person::new(name);
     /// let email = Email::from_str("margherita.hack@example.com").unwrap();
     /// person.add_email(email.clone());
@@ -87,7 +87,7 @@ impl Person {
     /// use std::str::FromStr;
     /// use phonenumber::PhoneNumber;
     ///
-    /// let name = Name::parse("Margherita".to_string(), "Hack".to_string()).unwrap();
+    /// let name = Name::parse("Margherita".to_owned(), "Hack".to_owned()).unwrap();
     /// let mut person = Person::new(name);
     /// let phone = PhoneNumber::from_str("+1234567890").unwrap();
     /// person.add_phone(phone.clone());
@@ -105,7 +105,7 @@ impl Person {
     /// use phonenumber::PhoneNumber;
     /// use std::str::FromStr;
     ///
-    /// let name = Name::parse("Margherita".to_string(), "Hack".to_string()).unwrap();
+    /// let name = Name::parse("Margherita".to_owned(), "Hack".to_owned()).unwrap();
     /// let mut person = Person::new(name);
     /// let phone = PhoneNumber::from_str("+1234567890").unwrap();
     /// person.add_phone(phone.clone());
@@ -121,7 +121,7 @@ impl Person {
     /// ```
     /// use planter_core::person::{Person, Name};
     ///
-    /// let name = Name::parse("Margherita".to_string(), "Hack".to_string()).unwrap();
+    /// let name = Name::parse("Margherita".to_owned(), "Hack".to_owned()).unwrap();
     /// let mut person = Person::new(name.clone());
     /// assert_eq!(person.name(), &name);
     /// ```
@@ -135,7 +135,7 @@ impl Person {
     /// ```
     /// use planter_core::person::{Person, Name};
     ///
-    /// let name = Name::parse("Margherita".to_string(), "Hack".to_string()).unwrap();
+    /// let name = Name::parse("Margherita".to_owned(), "Hack".to_owned()).unwrap();
     /// let mut person = Person::new(name);
     /// assert_eq!(person.first_name(), "Margherita");
     /// ```
@@ -149,7 +149,7 @@ impl Person {
     /// ```
     /// use planter_core::person::{Person, Name};
     ///
-    /// let name = Name::parse("Margherita".to_string(), "Hack".to_string()).unwrap();
+    /// let name = Name::parse("Margherita".to_owned(), "Hack".to_owned()).unwrap();
     /// let mut person = Person::new(name);
     /// assert_eq!(person.last_name(), "Hack");
     /// ```
@@ -175,7 +175,7 @@ impl Name {
     /// ```
     /// use planter_core::person::Name;
     ///
-    /// let name = Name::parse("Margherita".to_string(), "Hack".to_string());
+    /// let name = Name::parse("Margherita".to_owned(), "Hack".to_owned());
     /// assert!(name.is_some());
     /// ```
     pub fn parse(first: String, last: String) -> Option<Self> {
@@ -192,7 +192,7 @@ impl Name {
     /// ```
     /// use planter_core::person::{Name};
     ///
-    /// let name = Name::parse("Margherita".to_string(), "Hack".to_string()).unwrap();
+    /// let name = Name::parse("Margherita".to_owned(), "Hack".to_owned()).unwrap();
     /// assert_eq!(name.first(), "Margherita");
     /// ```
     pub fn first(&self) -> &str {
@@ -205,7 +205,7 @@ impl Name {
     /// ```
     /// use planter_core::person::{Name};
     ///
-    /// let name = Name::parse("Margherita".to_string(), "Hack".to_string()).unwrap();
+    /// let name = Name::parse("Margherita".to_owned(), "Hack".to_owned()).unwrap();
     /// assert_eq!(name.last(), "Hack");
     /// ```
     pub fn last(&self) -> &str {

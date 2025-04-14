@@ -37,7 +37,7 @@ impl Task {
     /// ```
     /// use planter_core::task::Task;
     ///
-    /// let task = Task::new("Become world leader".to_string());
+    /// let task = Task::new("Become world leader".to_owned());
     /// assert_eq!(task.name(), "Become world leader");
     /// ```
     pub fn new(name: String) -> Self {
@@ -71,7 +71,7 @@ impl Task {
     /// use chrono::{Utc, Duration};
     /// use planter_core::task::Task;
     ///
-    /// let mut task = Task::new("Become world leader".to_string());
+    /// let mut task = Task::new("Become world leader".to_owned());
     /// let start_time = Utc::now();
     /// task.edit_start(start_time);
     /// assert_eq!(task.start().unwrap(), start_time);
@@ -107,7 +107,7 @@ impl Task {
     /// use chrono::{Utc};
     /// use planter_core::task::Task;
     ///
-    /// let mut task = Task::new("Become world leader".to_string());
+    /// let mut task = Task::new("Become world leader".to_owned());
     /// assert!(task.start().is_none());
     ///
     /// let start_time = Utc::now();
@@ -136,7 +136,7 @@ impl Task {
     /// use chrono::{Utc};
     /// use planter_core::task::Task;
     ///
-    /// let mut task = Task::new("Become world leader".to_string());
+    /// let mut task = Task::new("Become world leader".to_owned());
     /// assert!(task.start().is_none());
     ///
     /// let mut finish_time = Utc::now();
@@ -171,7 +171,7 @@ impl Task {
     /// use chrono::{Utc};
     /// use planter_core::task::Task;
     ///
-    /// let mut task = Task::new("Become world leader".to_string());
+    /// let mut task = Task::new("Become world leader".to_owned());
     /// assert!(task.finish().is_none());
     /// let finish_time = Utc::now();
     /// task.edit_finish(finish_time);
@@ -193,7 +193,7 @@ impl Task {
     /// use chrono::{Utc, Duration};
     /// use planter_core::{task::Task, duration::PositiveDuration};
     ///
-    /// let mut task = Task::new("Become world leader".to_string());
+    /// let mut task = Task::new("Become world leader".to_owned());
     /// task.edit_duration(Duration::minutes(30).try_into().unwrap());
     /// assert!(task.duration().is_some());
     /// assert_eq!(task.duration().unwrap(), Duration::minutes(30).try_into().unwrap());
@@ -218,9 +218,9 @@ impl Task {
     /// ```
     /// use planter_core::{resources::{Resource, Material, NonConsumable}, task::Task};
     ///
-    /// let mut task = Task::new("Become world leader".to_string());
+    /// let mut task = Task::new("Become world leader".to_owned());
     /// let resource = Resource::Material(Material::NonConsumable(
-    ///   NonConsumable::new("Crowbar".to_string()),
+    ///   NonConsumable::new("Crowbar".to_owned()),
     /// ));
     /// task.add_resource(resource);
     ///
@@ -238,10 +238,10 @@ impl Task {
     /// use planter_core::task::Task;
     /// use planter_core::resources::{Resource, Material, NonConsumable};
     ///
-    /// let mut task = Task::new("Become world leader".to_string());
+    /// let mut task = Task::new("Become world leader".to_owned());
     /// assert!(task.resources().is_empty());
     /// let resource = Resource::Material(Material::NonConsumable(
-    ///   NonConsumable::new("Crowbar".to_string()),
+    ///   NonConsumable::new("Crowbar".to_owned()),
     /// ));
     /// task.add_resource(resource);
     /// assert_eq!(task.resources().len(), 1);
@@ -261,8 +261,8 @@ impl Task {
     /// ```
     /// use planter_core::task::Task;
     ///
-    /// let mut task = Task::new("Become world leader".to_string());
-    /// task.edit_name("Become world boss".to_string());
+    /// let mut task = Task::new("Become world leader".to_owned());
+    /// task.edit_name("Become world boss".to_owned());
     /// assert_eq!(task.name(), "Become world boss");
     /// ```
     pub fn edit_name(&mut self, name: String) {
@@ -276,7 +276,7 @@ impl Task {
     /// ```
     /// use planter_core::task::Task;
     ///
-    /// let mut task = Task::new("Become world leader".to_string());
+    /// let mut task = Task::new("Become world leader".to_owned());
     /// assert_eq!(task.name(), "Become world leader");
     /// ```
     pub fn name(&self) -> &str {
@@ -294,8 +294,8 @@ impl Task {
     /// ```
     /// use planter_core::task::Task;
     ///
-    /// let mut task = Task::new("Become world leader".to_string());
-    /// task.edit_description("Description".to_string());
+    /// let mut task = Task::new("Become world leader".to_owned());
+    /// task.edit_description("Description".to_owned());
     /// assert_eq!(task.description(), "Description");
     /// ```
     pub fn edit_description(&mut self, description: String) {
@@ -309,8 +309,8 @@ impl Task {
     /// ```
     /// use planter_core::task::Task;
     ///
-    /// let mut task = Task::new("Become world leader".to_string());
-    /// task.edit_description("Description".to_string());
+    /// let mut task = Task::new("Become world leader".to_owned());
+    /// task.edit_description("Description".to_owned());
     /// assert_eq!(task.description(), "Description");
     /// ```
     pub fn description(&self) -> &str {
@@ -324,7 +324,7 @@ impl Task {
     /// ```
     /// use planter_core::task::Task;
     ///
-    /// let mut task = Task::new("Become world leader".to_string());
+    /// let mut task = Task::new("Become world leader".to_owned());
     /// assert!(!task.completed());
     /// task.toggle_completed();
     /// assert!(task.completed());
@@ -340,7 +340,7 @@ impl Task {
     /// ```
     /// use planter_core::task::Task;
     ///
-    /// let mut task = Task::new("Become world leader".to_string());
+    /// let mut task = Task::new("Become world leader".to_owned());
     /// assert!(!task.completed());
     /// task.toggle_completed();
     /// assert!(task.completed());
@@ -359,7 +359,7 @@ impl Task {
     /// use chrono::{Utc, Duration};
     /// use planter_core::task::Task;
     ///
-    /// let mut task = Task::new("Become world leader".to_string());
+    /// let mut task = Task::new("Become world leader".to_owned());
     /// assert!(task.duration().is_none());
     ///
     /// task.edit_duration(Duration::hours(1).try_into().unwrap());
@@ -379,7 +379,7 @@ pub mod test_utils {
 
     /// Generates an empty task with a random name.
     pub fn task_strategy() -> impl Strategy<Value = Task> {
-        ".*".prop_map(|n| Task::new(n))
+        ".*".prop_map(Task::new)
     }
 }
 
@@ -398,7 +398,7 @@ mod tests {
         fn duration_is_properly_set_when_adding_start_and_finish_time(milliseconds in 0..MAX_DURATION) {
             let start = Utc::now();
             let finish = start + Duration::milliseconds(milliseconds);
-            let mut task = Task::new("World domination".to_string());
+            let mut task = Task::new("World domination".to_owned());
 
             task.edit_start(start);
             task.edit_finish(finish);
@@ -408,7 +408,7 @@ mod tests {
 
         #[test]
         fn task_times_stay_none_when_adding_duration(milliseconds in 0..MAX_DURATION) {
-            let mut task = Task::new("World domination".to_string());
+            let mut task = Task::new("World domination".to_owned());
 
             let duration = Duration::milliseconds(milliseconds).try_into().unwrap();
             task.edit_duration(duration);
@@ -419,7 +419,7 @@ mod tests {
         #[test]
         fn finish_time_is_properly_set_when_adding_duration(milliseconds in 0..MAX_DURATION) {
             let start = Utc::now();
-            let mut task = Task::new("World domination".to_string());
+            let mut task = Task::new("World domination".to_owned());
 
             task.edit_start(start);
             let duration = Duration::milliseconds(milliseconds).try_into().unwrap();
@@ -431,7 +431,7 @@ mod tests {
         fn finish_time_is_properly_pushed_ahead_when_adding_duration(milliseconds in 0..MAX_DURATION) {
             let start = Utc::now();
             let finish = start + Duration::milliseconds(milliseconds);
-            let mut task = Task::new("World domination".to_string());
+            let mut task = Task::new("World domination".to_owned());
 
             task.edit_start(start);
             task.edit_finish(finish);
@@ -445,7 +445,7 @@ mod tests {
         fn start_time_is_properly_pushed_back_when_adding_earlier_end_time(milliseconds in 0..MAX_DURATION) {
             let start = Utc::now();
             let finish = start - Duration::milliseconds(milliseconds);
-            let mut task = Task::new("World domination".to_string());
+            let mut task = Task::new("World domination".to_owned());
 
             task.edit_start(start);
             task.edit_finish(finish);

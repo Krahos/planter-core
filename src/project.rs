@@ -22,7 +22,7 @@ pub struct Project {
     /// The start date of the project.
     start_date: Option<DateTime<Utc>>,
     /// The tasks associated with the project.
-    tasks: Dag<Task, TaskRelationship>,
+    tasks: Dag<Task, TaskRelationship, usize>,
     /// The list of resources associated with the project.
     resources: Vec<Resource>,
     /// The list of stakeholders associated with the project.
@@ -217,7 +217,7 @@ impl Project {
     /// project.add_task(Task::new("Become world leader".to_owned()));
     /// assert_eq!(project.task(0).unwrap().name(), "Become world leader".to_owned());
     /// ```
-    pub fn task(&self, index: u32) -> Option<&Task> {
+    pub fn task(&self, index: usize) -> Option<&Task> {
         self.tasks.node_weight(index.into())
     }
 
@@ -240,7 +240,7 @@ impl Project {
     /// task.edit_name("Become world's biggest loser".to_owned());
     /// assert_eq!(task.name(), "Become world's biggest loser".to_owned())
     /// ```
-    pub fn task_mut(&mut self, index: u32) -> Option<&mut Task> {
+    pub fn task_mut(&mut self, index: usize) -> Option<&mut Task> {
         self.tasks.node_weight_mut(index.into())
     }
 
@@ -266,15 +266,15 @@ impl Project {
     /// ```
     /// use planter_core::{project::Project, task::Task};
     ///
-    /// let mut project = Project::new("World domination".to_string());
-    /// project.add_task(Task::new("Become world leader".to_string()));
+    /// let mut project = Project::new("World domination".to_owned());
+    /// project.add_task(Task::new("Become world leader".to_owned()));
     /// assert_eq!(project.tasks().count(), 1);
     /// ```
     pub fn tasks_mut(&mut self) -> impl Iterator<Item = &mut Task> {
         self.tasks.node_weights_mut()
     }
 
-    /// Gets the list of successors for a given node.
+    /// Adds a relationship betwen tasks, where one is the predecessor and the other one a successor.
     ///
     /// # Example
     ///
@@ -290,8 +290,8 @@ impl Project {
     /// ```
     pub fn add_relationship(
         &mut self,
-        predecessor_index: u32,
-        successor_index: u32,
+        predecessor_index: usize,
+        successor_index: usize,
         kind: TaskRelationship,
     ) -> anyhow::Result<()> {
         self.tasks
@@ -314,13 +314,13 @@ impl Project {
     ///
     /// assert_eq!(project.successors(0).next().unwrap().name(), "Become world leader".to_owned())
     /// ```
-    pub fn successors(&self, node_index: u32) -> impl Iterator<Item = &Task> {
+    pub fn successors(&self, node_index: usize) -> impl Iterator<Item = &Task> {
         self.tasks
             .neighbors_directed(node_index.into(), Direction::Outgoing)
             .map(|index| &self.tasks[index])
     }
 
-    /// Gets the list of successors for a given node.
+    /// Gets the list of predecessors for a given node.
     ///
     /// # Example
     ///
@@ -334,19 +334,19 @@ impl Project {
     ///
     /// assert_eq!(project.predecessors(0).next().unwrap().name(), "Become world leader".to_owned())
     /// ```
-    pub fn predecessors(&self, node_index: u32) -> impl Iterator<Item = &Task> {
+    pub fn predecessors(&self, node_index: usize) -> impl Iterator<Item = &Task> {
         self.tasks
             .neighbors_directed(node_index.into(), Direction::Incoming)
             .map(|index| &self.tasks[index])
     }
 
     /// Updates the project by making sure the predecessors for the task with
-    /// index `node_index` are exactly the ones listed in `indexes`
+    /// index `node_index` are exactly the ones listed in `predecessors_indices`
     ///
     /// # Arguments
     ///
     /// * `task_index` - The index whose predecessors need to be updated.
-    /// * `predecessors_indexes` - The indexes of the predecessors.
+    /// * `predecessors_indices` - The indices of the predecessors.
     ///
     /// # Example
     ///
@@ -364,8 +364,8 @@ impl Project {
     /// assert_eq!(project.predecessors(2).count(), 2);
     pub fn update_predecessors(
         &mut self,
-        task_index: u32,
-        predecessors_indices: &[u32],
+        task_index: usize,
+        predecessors_indices: &[usize],
     ) -> anyhow::Result<()> {
         self.validate_indices(task_index, predecessors_indices)?;
 
@@ -390,14 +390,12 @@ impl Project {
         Ok(())
     }
 
-    fn validate_indices(&self, task_index: u32, related_indexes: &[u32]) -> anyhow::Result<()> {
-        let graph_edges: HashSet<u32> = self
-            .tasks
-            .node_identifiers()
-            .map(|i| i.index() as u32)
-            .collect();
+    /// Checks that all the tasks with indices passed as parameters actually exist in the project.
+    fn validate_indices(&self, task_index: usize, related_indices: &[usize]) -> anyhow::Result<()> {
+        let graph_edges: HashSet<usize> =
+            self.tasks.node_identifiers().map(|i| i.index()).collect();
         // Make sure all the listed predecessors exist within the graph.
-        if !related_indexes.iter().all(|i| graph_edges.contains(i)) {
+        if !related_indices.iter().all(|i| graph_edges.contains(i)) {
             bail!("Some index in the predecessors list doesn't exist in the graph");
         }
 
@@ -412,12 +410,12 @@ impl Project {
     }
 
     /// Updates the project by making sure the successors for the task with
-    /// index `node_index` are exactly the ones listed in `indexes`
+    /// index `node_index` are exactly the ones listed in `successors_indices`
     ///
     /// # Arguments
     ///
-    /// * `task_index` - The index whose predecessors need to be updated.
-    /// * `successors_indexes` - The indexes of the successors.
+    /// * `task_index` - The index whose successors need to be updated.
+    /// * `successors_indices` - The indices of the successors.
     ///
     /// # Example
     ///
@@ -435,8 +433,8 @@ impl Project {
     /// assert_eq!(project.successors(0).count(), 2);
     pub fn update_successors(
         &mut self,
-        task_index: u32,
-        successors_indices: &[u32],
+        task_index: usize,
+        successors_indices: &[usize],
     ) -> anyhow::Result<()> {
         self.validate_indices(task_index, successors_indices)?;
 
@@ -588,7 +586,7 @@ pub mod test_utils {
     /// Generate a random `[Project]` where every node is connected to the previous one.
     pub fn project_graph_strategy() -> impl Strategy<Value = Project> {
         (".*", tasks_strategy()).prop_map(|(n, tasks)| {
-            let indices = 0..tasks.len() as u32;
+            let indices = 0..tasks.len();
             let mut project = Project::new(n).with_tasks(tasks);
 
             let mut previous = None;
@@ -606,12 +604,6 @@ pub mod test_utils {
     pub fn project_strategy() -> impl Strategy<Value = Project> {
         (".*", tasks_strategy()).prop_map(|(n, tasks)| Project::new(n).with_tasks(tasks))
     }
-
-    /// Generates a tuple of indices (a, b) where a!=b.
-    pub fn indices_strategy() -> impl Strategy<Value = (u32, u32)> {
-        let tasks = (MAX_TASKS - 1) as u32;
-        (0..tasks, 0..tasks).prop_filter("", |(a, b)| a != b)
-    }
 }
 
 #[cfg(test)]
@@ -623,17 +615,17 @@ mod tests {
     proptest! {
         #[test]
         fn update_predecessors_rejects_circular_graphs(mut project in project_graph_strategy()) {
-            assert!(project.update_predecessors(0, &[(project.tasks().count() - 1).try_into().unwrap()]).is_err());
+            assert!(project.update_predecessors(0, &[project.tasks().count() - 1]).is_err());
         }
 
         #[test]
         fn update_successors_rejects_circular_graphs(mut project in project_graph_strategy()) {
-            assert!(project.update_successors((project.tasks().count() - 1).try_into().unwrap(), &[0] ).is_err());
+            assert!(project.update_successors(project.tasks().count() - 1, &[0] ).is_err());
         }
 
         #[test]
         fn update_predecessors_rejects_non_existent_indices(mut project in project_strategy()) {
-            let count: u32 = project.tasks().count().try_into().unwrap();
+            let count: usize = project.tasks().count();
 
             assert!(project.update_predecessors(0, &[count]).is_err())
         }
@@ -641,7 +633,7 @@ mod tests {
 
         #[test]
         fn update_successors_rejects_non_existent_indices(mut project in project_strategy()) {
-            let count: u32 = project.tasks().count().try_into().unwrap();
+            let count: usize = project.tasks().count();
 
             assert!(project.update_successors(0, &[count]).is_err())
         }
@@ -649,11 +641,11 @@ mod tests {
         #[test]
         fn update_predecessors_works(mut project in project_strategy()) {
             let mut rng = rng();
-            let task_index1 = rng.random_range(0..project.tasks.node_count() as u32);
+            let task_index1 = rng.random_range(0..project.tasks.node_count());
             let mut task_index2 = task_index1;
 
             while task_index2 == task_index1 {
-                task_index2 = rng.random_range(0..project.tasks.node_count() as u32);
+                task_index2 = rng.random_range(0..project.tasks.node_count());
             }
 
             project.update_predecessors(task_index1, &[task_index2]).unwrap();
@@ -666,11 +658,11 @@ mod tests {
         #[test]
         fn update_successors_works(mut project in project_strategy()) {
             let mut rng = rng();
-            let task_index1 = rng.random_range(0..project.tasks.node_count() as u32);
+            let task_index1 = rng.random_range(0..project.tasks.node_count());
             let mut task_index2 = task_index1;
 
             while task_index2 == task_index1 {
-                task_index2 = rng.random_range(0..project.tasks.node_count() as u32);
+                task_index2 = rng.random_range(0..project.tasks.node_count());
             }
 
             project.update_successors(task_index1, &[task_index2]).unwrap();

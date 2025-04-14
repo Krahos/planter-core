@@ -37,6 +37,9 @@ impl PositiveDuration {
     /// * `DurationError::InvalidInput` - If the input string couldn't be parsed into a `PositiveDuration`.
     /// * `DurationError::ExceedsMaximumDuration` - If the parsed duration exceeds the maximum allowed value.
     ///
+    /// # Panics
+    /// This function uses `expect`, but it should only panic in case of a bug.
+    ///
     /// # Examples
     ///
     /// ```
@@ -52,6 +55,7 @@ impl PositiveDuration {
     /// /// Passing invalid input will result in an `[DurationError::InvalidInput]`
     /// let duration = PositiveDuration::parse_from_str("random garbage").unwrap();
     /// ```
+    #[allow(clippy::expect_used)]
     pub fn parse_from_str(s: &str) -> Result<Self, DurationError> {
         let bytes = s.as_bytes();
         static RE: Lazy<Regex> = Lazy::new(|| {
@@ -117,8 +121,8 @@ mod tests {
     proptest! {
         #[test]
         fn parse_from_str_works(s in duration_string()) {
-            let hours = s.split(' ').into_iter().next().unwrap().parse::<i64>().unwrap();
-            if hours < 0 || hours > MAX_DURATION {
+            let hours = s.split(' ').next().unwrap().parse::<i64>().unwrap();
+            if !(0..=MAX_DURATION).contains(&hours) {
                 assert!(PositiveDuration::parse_from_str(&s).is_err());
             } else {
                 let duration = PositiveDuration::parse_from_str(&s).unwrap();
