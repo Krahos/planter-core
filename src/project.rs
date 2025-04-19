@@ -340,6 +340,26 @@ impl Project {
             .map(|index| &self.tasks[index])
     }
 
+    /// Gets the indices of all predecessors for a given node.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use planter_core::{project::{Project, TaskRelationship}, task::Task};
+    ///
+    /// let mut project = Project::new("World domination".to_owned());
+    /// project.add_task(Task::new("Get rich".to_owned()));
+    /// project.add_task(Task::new("Become world leader".to_owned()));
+    /// project.add_relationship(1, 0, TaskRelationship::default());
+    ///
+    /// assert_eq!(project.predecessors_indices(0).next().unwrap(), 1)
+    /// ```
+    pub fn predecessors_indices(&self, node_index: usize) -> impl Iterator<Item = usize> {
+        self.tasks
+            .neighbors_directed(node_index, Direction::Incoming)
+            .map(|index| index as usize)
+    }
+
     /// Updates the project by making sure the predecessors for the task with
     /// index `node_index` are exactly the ones listed in `predecessors_indices`
     ///
@@ -629,7 +649,6 @@ mod tests {
 
             assert!(project.update_predecessors(0, &[count]).is_err())
         }
-
 
         #[test]
         fn update_successors_rejects_non_existent_indices(mut project in project_strategy()) {
