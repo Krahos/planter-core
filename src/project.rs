@@ -6,6 +6,7 @@ use daggy::{
     Dag,
     petgraph::{
         Direction,
+        csr::IndexType,
         visit::{IntoNeighborsDirected, IntoNodeIdentifiers},
     },
 };
@@ -300,6 +301,37 @@ impl Project {
         anyhow::Ok(())
     }
 
+    /// Removes a relationship betwen tasks, where one is the predecessor and the other one a successor.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use planter_core::{project::{Project, TaskRelationship}, task::Task};
+    ///
+    /// let mut project = Project::new("World domination".to_owned());
+    /// project.add_task(Task::new("Get rich".to_owned()));
+    /// project.add_task(Task::new("Become world leader".to_owned()));
+    /// project.add_relationship(0, 1, TaskRelationship::default());
+    /// project.remove_relationship(0, 1);
+    ///
+    /// assert_eq!(project.successors(0).count(), 0);
+    /// ```
+    pub fn remove_relationship(
+        &mut self,
+        predecessor_index: usize,
+        successor_index: usize,
+    ) -> anyhow::Result<()> {
+        let edge_index = self
+            .tasks
+            .find_edge(predecessor_index.into(), successor_index.into())
+            .context(
+                "Tried to remove a relationship that doesn't exist or between non existing nodes",
+            )?;
+
+        self.tasks.remove_edge(edge_index);
+        anyhow::Ok(())
+    }
+
     /// Gets the list of successors for a given node.
     ///
     /// # Example
@@ -318,6 +350,26 @@ impl Project {
         self.tasks
             .neighbors_directed(node_index.into(), Direction::Outgoing)
             .map(|index| &self.tasks[index])
+    }
+
+    /// Gets the indices of all successors for a given node.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use planter_core::{project::{Project, TaskRelationship}, task::Task};
+    ///
+    /// let mut project = Project::new("World domination".to_owned());
+    /// project.add_task(Task::new("Get rich".to_owned()));
+    /// project.add_task(Task::new("Become world leader".to_owned()));
+    /// project.add_relationship(0, 1, TaskRelationship::default());
+    ///
+    /// assert_eq!(project.successors_indices(0).next().unwrap(), 1)
+    /// ```
+    pub fn successors_indices(&self, node_index: usize) -> impl Iterator<Item = usize> {
+        self.tasks
+            .neighbors_directed(node_index.index().into(), Direction::Outgoing)
+            .map(|index| index.index())
     }
 
     /// Gets the list of predecessors for a given node.
@@ -356,8 +408,8 @@ impl Project {
     /// ```
     pub fn predecessors_indices(&self, node_index: usize) -> impl Iterator<Item = usize> {
         self.tasks
-            .neighbors_directed(node_index, Direction::Incoming)
-            .map(|index| index as usize)
+            .neighbors_directed(node_index.index().into(), Direction::Incoming)
+            .map(|index| index.index())
     }
 
     /// Updates the project by making sure the predecessors for the task with
@@ -401,6 +453,14 @@ impl Project {
                 ))?;
         }
 
+        // Remove all predecessors.
+        for i in self
+            .predecessors_indices(task_index)
+            .collect::<Vec<usize>>()
+        {
+            self.remove_relationship(i, task_index)
+                .expect("It should have been possible to remove a predecessor. This is a bug.");
+        }
         // Update predecessors.
         for &i in predecessors_indices {
             self.tasks
@@ -470,6 +530,11 @@ impl Project {
                 ))?;
         }
 
+        // Remove all successors.
+        for i in self.successors_indices(task_index).collect::<Vec<usize>>() {
+            self.remove_relationship(task_index, i)
+                .expect("It should have been possible to remove a predecessor. This is a bug.");
+        }
         // Update successors.
         for &i in successors_indices {
             self.tasks
@@ -587,6 +652,7 @@ pub mod test_utils {
     use super::{Project, TaskRelationship};
 
     const MAX_TASKS: usize = 100;
+    const MIN_TASKS: usize = 5;
 
     /// Generates a random task relationship kind.
     pub fn task_relationship_strategy() -> impl Strategy<Value = TaskRelationship> {
@@ -598,9 +664,9 @@ pub mod test_utils {
         ]
     }
 
-    /// Generate a random amount of randomly generated `[Tasks]`.
+    /// Generate a random amount of randomly generated `[Tasks]`, between `[MIN_TASKS]` and `[MAX_TASKS]`.
     pub fn tasks_strategy() -> impl Strategy<Value = Vec<Task>> {
-        collection::vec(task_strategy(), 2..MAX_TASKS)
+        collection::vec(task_strategy(), MIN_TASKS..MAX_TASKS)
     }
 
     /// Generate a random `[Project]` where every node is connected to the previous one.
@@ -658,6 +724,44 @@ mod tests {
         }
 
         #[test]
+        fn update_predecessors_removes_them_if_input_is_empty(mut project in project_strategy()) {
+            let mut rng = rng();
+            let task_index1 = rng.random_range(0..project.tasks.node_count());
+            let mut task_index2 = task_index1;
+
+            while task_index2 == task_index1 {
+                task_index2 = rng.random_range(0..project.tasks.node_count());
+            }
+
+            project.update_predecessors(task_index1, &[task_index2]).unwrap();
+            project.update_predecessors(task_index1, &[]).unwrap();
+
+            assert_eq!(project.predecessors(task_index1).count(), 0);
+        }
+
+        #[test]
+        fn update_predecessors_removes_indices_not_present_in_input(mut project in project_strategy()) {
+            let mut rng = rng();
+            let task_index1 = rng.random_range(0..project.tasks.node_count());
+            let mut task_index2 = task_index1;
+            let mut task_index3 = task_index1;
+
+            while task_index2 == task_index1 {
+                task_index2 = rng.random_range(0..project.tasks.node_count());
+            }
+            while task_index3 == task_index1 || task_index3 == task_index2 {
+                task_index3 = rng.random_range(0..project.tasks.node_count());
+            }
+
+            project.update_predecessors(task_index1, &[task_index2, task_index3]).unwrap();
+            project.update_predecessors(task_index1, &[task_index2]).unwrap();
+
+            let mut predecessors = project.predecessors(task_index1);
+            assert_eq!(predecessors.next(), project.task(task_index2));
+            assert!(predecessors.next().is_none());
+        }
+
+        #[test]
         fn update_predecessors_works(mut project in project_strategy()) {
             let mut rng = rng();
             let task_index1 = rng.random_range(0..project.tasks.node_count());
@@ -669,9 +773,9 @@ mod tests {
 
             project.update_predecessors(task_index1, &[task_index2]).unwrap();
 
-            let mut predecessors =project.predecessors(task_index1);
+            let mut predecessors = project.predecessors(task_index1);
+            assert_eq!(project.predecessors(task_index1).count(), 1);
             assert_eq!(predecessors.next(), project.task(task_index2));
-            assert!(predecessors.next().is_none());
         }
 
         #[test]
@@ -684,6 +788,44 @@ mod tests {
                 task_index2 = rng.random_range(0..project.tasks.node_count());
             }
 
+            project.update_successors(task_index1, &[task_index2]).unwrap();
+
+            let mut successors = project.successors(task_index1);
+            assert_eq!(successors.next(), project.task(task_index2));
+            assert!(successors.next().is_none());
+        }
+
+        #[test]
+        fn update_successors_removes_them_if_input_is_empty(mut project in project_strategy()) {
+            let mut rng = rng();
+            let task_index1 = rng.random_range(0..project.tasks.node_count());
+            let mut task_index2 = task_index1;
+
+            while task_index2 == task_index1 {
+                task_index2 = rng.random_range(0..project.tasks.node_count());
+            }
+
+            project.update_successors(task_index1, &[task_index2]).unwrap();
+            project.update_successors(task_index1, &[]).unwrap();
+
+            assert_eq!(project.successors(task_index1).count(), 0);
+        }
+
+        #[test]
+        fn update_successors_removes_indices_not_present_in_input(mut project in project_strategy()) {
+            let mut rng = rng();
+            let task_index1 = rng.random_range(0..project.tasks.node_count());
+            let mut task_index2 = task_index1;
+            let mut task_index3 = task_index1;
+
+            while task_index2 == task_index1 {
+                task_index2 = rng.random_range(0..project.tasks.node_count());
+            }
+            while task_index3 == task_index1 || task_index3 == task_index2 {
+                task_index3 = rng.random_range(0..project.tasks.node_count());
+            }
+
+            project.update_successors(task_index1, &[task_index2, task_index3]).unwrap();
             project.update_successors(task_index1, &[task_index2]).unwrap();
 
             let mut successors = project.successors(task_index1);
