@@ -203,6 +203,30 @@ impl Project {
         self.tasks.add_node(task);
     }
 
+    /// Deletes a task and all references to it from the project.
+    ///
+    /// # Arguments
+    ///
+    /// * `i` - The index of the task.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use planter_core::{project::Project, task::Task};
+    ///
+    /// let mut project = Project::new("World domination".to_owned());
+    /// project.add_task(Task::new("Become world leader".to_owned()));
+    /// assert_eq!(project.tasks().count(), 1);
+    /// assert!(project.rm_task(0).is_ok());
+    /// assert_eq!(project.tasks().count(), 0);
+    /// ```
+    pub fn rm_task(&mut self, i: usize) -> anyhow::Result<()> {
+        self.tasks
+            .remove_node(i.into())
+            .context("Tried removing a non existing node")?;
+        Ok(())
+    }
+
     /// Gets  a reference to the task with the given index from the project.
     ///
     /// # Arguments
