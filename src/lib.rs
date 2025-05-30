@@ -22,8 +22,3 @@ pub mod resources;
 pub mod stakeholders;
 /// A task is a unit of work that needs to be completed in order to achieve the project's objectives. Tasks have a duration, a start date, an end date, and a status.
 pub mod task;
-/// Tasks, within a project, are have various dependencies between them:
-///     - Time relationships (Start to finish, Finish to start, ...).
-///     - Subtask relationships (EG: TaskA has Task1 and Task2 as subtasks).
-/// These relationships are covered here.
-pub mod tasks;

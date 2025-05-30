@@ -1,12 +1,16 @@
-use anyhow::Context;
-use chrono::{DateTime, Utc};
+use std::collections::HashSet;
 
-use crate::{
-    resources::Resource,
-    stakeholders::Stakeholder,
-    task::Task,
-    tasks::{Tasks, TimeRelationship},
+use anyhow::{Context, bail};
+use chrono::{DateTime, Utc};
+use daggy::{
+    Dag,
+    petgraph::{
+        Direction,
+        visit::{IntoNeighborsDirected, IntoNodeIdentifiers},
+    },
 };
+
+use crate::{resources::Resource, stakeholders::Stakeholder, task::Task};
 
 #[derive(Debug, Default)]
 /// Represents a project with a name and a list of resources.
@@ -18,11 +22,33 @@ pub struct Project {
     /// The start date of the project.
     start_date: Option<DateTime<Utc>>,
     /// The tasks associated with the project.
-    tasks: Tasks,
+    tasks: Dag<Task, TimeRelationship, usize>,
+    subtask_relationships: Vec<SubtaskRelationship>,
     /// The list of resources associated with the project.
     resources: Vec<Resource>,
     /// The list of stakeholders associated with the project.
     stakeholders: Vec<Stakeholder>,
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+/// A given task, might be composed of different subtasks.
+pub struct SubtaskRelationship {
+    task: usize,
+    subtask: usize,
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+/// The predecessor - successor relationship between tasks.
+pub enum TimeRelationship {
+    /// The predecessor has to start for the successor to finish.
+    StartToFinish,
+    /// The predecessor has to start for the successor to finish.
+    FinishToFinish,
+    #[default]
+    /// The predecessor has to finish for the successor to start.
+    FinishToStart,
+    /// The predecessor has to start for the successor to finish.
+    StartToStart,
 }
 
 impl Project {
@@ -51,7 +77,8 @@ impl Project {
             start_date: None,
             resources: Vec::new(),
             stakeholders: Vec::new(),
-            tasks: Tasks::new(),
+            tasks: Dag::new(),
+            subtask_relationships: Vec::new(),
         }
     }
 
@@ -141,7 +168,7 @@ impl Project {
     ///
     /// ```
     pub fn with_task(mut self, task: Task) -> Self {
-        self.tasks.add_task(task);
+        self.tasks.add_node(task);
         self
     }
 
@@ -181,7 +208,7 @@ impl Project {
     /// assert_eq!(project.tasks().count(), 1);
     /// ```
     pub fn add_task(&mut self, task: Task) {
-        self.tasks.add_task(task);
+        self.tasks.add_node(task);
     }
 
     /// Deletes a task and all references to it from the project.
@@ -203,7 +230,7 @@ impl Project {
     /// ```
     pub fn rm_task(&mut self, i: usize) -> anyhow::Result<()> {
         self.tasks
-            .rm_task(i)
+            .remove_node(i.into())
             .context("Tried removing a non existing node from Dag")?;
         Ok(())
     }
@@ -224,7 +251,7 @@ impl Project {
     /// assert_eq!(project.task(0).unwrap().name(), "Become world leader".to_owned());
     /// ```
     pub fn task(&self, index: usize) -> Option<&Task> {
-        self.tasks.task(index)
+        self.tasks.node_weight(index.into())
     }
 
     /// Gets a mutable reference to the task with the given index from the project.
@@ -247,7 +274,7 @@ impl Project {
     /// assert_eq!(task.name(), "Become world's biggest loser".to_owned())
     /// ```
     pub fn task_mut(&mut self, index: usize) -> Option<&mut Task> {
-        self.tasks.task_mut(index)
+        self.tasks.node_weight_mut(index.into())
     }
 
     /// Returns the tasks of the project.
@@ -262,7 +289,7 @@ impl Project {
     /// assert_eq!(project.tasks().count(), 1);
     /// ```
     pub fn tasks(&self) -> impl Iterator<Item = &Task> {
-        self.tasks.tasks()
+        self.tasks.raw_nodes().iter().map(|node| &node.weight)
     }
 
     /// Returns a mutable reference to the tasks of the project.
@@ -277,7 +304,7 @@ impl Project {
     /// assert_eq!(project.tasks().count(), 1);
     /// ```
     pub fn tasks_mut(&mut self) -> impl Iterator<Item = &mut Task> {
-        self.tasks.tasks_mut()
+        self.tasks.node_weights_mut()
     }
 
     /// Adds a relationship betwen tasks, where one is the predecessor and the other one a successor.
@@ -285,23 +312,23 @@ impl Project {
     /// # Example
     ///
     /// ```
-    /// use planter_core::{project::{Project}, tasks::TimeRelationship, task::Task};
+    /// use planter_core::{project::{Project, TimeRelationship}, task::Task};
     ///
     /// let mut project = Project::new("World domination".to_owned());
     /// project.add_task(Task::new("Get rich".to_owned()));
     /// project.add_task(Task::new("Become world leader".to_owned()));
-    /// project.add_relationship(0, 1, TimeRelationship::default());
+    /// project.add_time_relationship(0, 1, TimeRelationship::default());
     ///
     /// assert_eq!(project.successors(0).next().unwrap().name(), "Become world leader".to_owned())
     /// ```
-    pub fn add_relationship(
+    pub fn add_time_relationship(
         &mut self,
         predecessor_index: usize,
         successor_index: usize,
         kind: TimeRelationship,
     ) -> anyhow::Result<()> {
         self.tasks
-            .add_relationship(predecessor_index, successor_index, kind)
+            .update_edge(predecessor_index.into(), successor_index.into(), kind)
             .context("Tried to add a relationship between non existing nodes")?;
         anyhow::Ok(())
     }
@@ -311,25 +338,29 @@ impl Project {
     /// # Example
     ///
     /// ```
-    /// use planter_core::{project::Project, tasks::TimeRelationship, task::Task};
+    /// use planter_core::{project::{Project, TimeRelationship}, task::Task};
     ///
     /// let mut project = Project::new("World domination".to_owned());
     /// project.add_task(Task::new("Get rich".to_owned()));
     /// project.add_task(Task::new("Become world leader".to_owned()));
-    /// project.add_relationship(0, 1, TimeRelationship::default());
-    /// project.remove_relationship(0, 1);
+    /// project.add_time_relationship(0, 1, TimeRelationship::default());
+    /// project.remove_time_relationship(0, 1);
     ///
     /// assert_eq!(project.successors(0).count(), 0);
     /// ```
-    pub fn remove_relationship(
+    pub fn remove_time_relationship(
         &mut self,
         predecessor_index: usize,
         successor_index: usize,
     ) -> anyhow::Result<()> {
-        self.tasks
-            .remove_relationship(predecessor_index, successor_index)
-            .context("Failed to remove relationship from project")?;
+        let edge_index = self
+            .tasks
+            .find_edge(predecessor_index.into(), successor_index.into())
+            .context(
+                "Tried to remove a relationship that doesn't exist or between non existing nodes",
+            )?;
 
+        self.tasks.remove_edge(edge_index);
         anyhow::Ok(())
     }
 
@@ -338,17 +369,19 @@ impl Project {
     /// # Example
     ///
     /// ```
-    /// use planter_core::{project::Project, tasks::TimeRelationship, task::Task};
+    /// use planter_core::{project::{Project, TimeRelationship}, task::Task};
     ///
     /// let mut project = Project::new("World domination".to_owned());
     /// project.add_task(Task::new("Get rich".to_owned()));
     /// project.add_task(Task::new("Become world leader".to_owned()));
-    /// project.add_relationship(0, 1, TimeRelationship::default());
+    /// project.add_time_relationship(0, 1, TimeRelationship::default());
     ///
     /// assert_eq!(project.successors(0).next().unwrap().name(), "Become world leader".to_owned())
     /// ```
     pub fn successors(&self, node_index: usize) -> impl Iterator<Item = &Task> {
-        self.tasks.successors(node_index)
+        self.tasks
+            .neighbors_directed(node_index.into(), Direction::Outgoing)
+            .map(|index| &self.tasks[index])
     }
 
     /// Gets the indices of all successors for a given node.
@@ -356,17 +389,19 @@ impl Project {
     /// # Example
     ///
     /// ```
-    /// use planter_core::{project::Project, tasks::TimeRelationship, task::Task};
+    /// use planter_core::{project::{Project, TimeRelationship}, task::Task};
     ///
     /// let mut project = Project::new("World domination".to_owned());
     /// project.add_task(Task::new("Get rich".to_owned()));
     /// project.add_task(Task::new("Become world leader".to_owned()));
-    /// project.add_relationship(0, 1, TimeRelationship::default());
+    /// project.add_time_relationship(0, 1, TimeRelationship::default());
     ///
     /// assert_eq!(project.successors_indices(0).next().unwrap(), 1)
     /// ```
     pub fn successors_indices(&self, node_index: usize) -> impl Iterator<Item = usize> {
-        self.tasks.successors_indices(node_index)
+        self.tasks
+            .neighbors_directed(node_index.into(), Direction::Outgoing)
+            .map(|index| index.index())
     }
 
     /// Gets the list of predecessors for a given node.
@@ -374,17 +409,19 @@ impl Project {
     /// # Example
     ///
     /// ```
-    /// use planter_core::{project::Project, tasks::TimeRelationship, task::Task};
+    /// use planter_core::{project::{Project, TimeRelationship}, task::Task};
     ///
     /// let mut project = Project::new("World domination".to_owned());
     /// project.add_task(Task::new("Get rich".to_owned()));
     /// project.add_task(Task::new("Become world leader".to_owned()));
-    /// project.add_relationship(1, 0, TimeRelationship::default());
+    /// project.add_time_relationship(1, 0, TimeRelationship::default());
     ///
     /// assert_eq!(project.predecessors(0).next().unwrap().name(), "Become world leader".to_owned())
     /// ```
     pub fn predecessors(&self, node_index: usize) -> impl Iterator<Item = &Task> {
-        self.tasks.predecessors(node_index)
+        self.tasks
+            .neighbors_directed(node_index.into(), Direction::Incoming)
+            .map(|index| &self.tasks[index])
     }
 
     /// Gets the indices of all predecessors for a given node.
@@ -392,17 +429,19 @@ impl Project {
     /// # Example
     ///
     /// ```
-    /// use planter_core::{project::Project, tasks::TimeRelationship, task::Task};
+    /// use planter_core::{project::{Project, TimeRelationship}, task::Task};
     ///
     /// let mut project = Project::new("World domination".to_owned());
     /// project.add_task(Task::new("Get rich".to_owned()));
     /// project.add_task(Task::new("Become world leader".to_owned()));
-    /// project.add_relationship(1, 0, TimeRelationship::default());
+    /// project.add_time_relationship(1, 0, TimeRelationship::default());
     ///
     /// assert_eq!(project.predecessors_indices(0).next().unwrap(), 1)
     /// ```
     pub fn predecessors_indices(&self, node_index: usize) -> impl Iterator<Item = usize> {
-        self.tasks.predecessors_indices(node_index)
+        self.tasks
+            .neighbors_directed(node_index.into(), Direction::Incoming)
+            .map(|index| index.index())
     }
 
     /// Updates the project by making sure the predecessors for the task with
@@ -432,9 +471,53 @@ impl Project {
         task_index: usize,
         predecessors_indices: &[usize],
     ) -> anyhow::Result<()> {
-        self.tasks
-            .update_predecessors(task_index, predecessors_indices)
-            .context("Failed to update predecessors within the project")?;
+        self.validate_indices(task_index, predecessors_indices)?;
+
+        // Update predecessors in a cloned data structure for tasks.
+        // If this gives an error, the actual data structure won't be polluted.
+        // TODO: benchmark and see if there is a better way to do this without cloning.
+        let mut tasks_clone = self.tasks.clone();
+        for &i in predecessors_indices {
+            tasks_clone
+                .add_edge(i.into(), task_index.into(), TimeRelationship::FinishToStart)
+                .context(format!(
+                    "A cycle was detected between tasks {i} and {task_index}"
+                ))?;
+        }
+
+        // Remove all predecessors.
+        for i in self
+            .predecessors_indices(task_index)
+            .collect::<Vec<usize>>()
+        {
+            self.remove_time_relationship(i, task_index)
+                .expect("It should have been possible to remove a predecessor. This is a bug.");
+        }
+        // Update predecessors.
+        for &i in predecessors_indices {
+            self.tasks
+                .add_edge(i.into(), task_index.into(), TimeRelationship::FinishToStart)
+                .context("This shouldn't have happened because the data structure was just checked for cycles.")?;
+        }
+        Ok(())
+    }
+
+    /// Checks that all the tasks with indices passed as parameters actually exist in the project.
+    fn validate_indices(&self, task_index: usize, related_indices: &[usize]) -> anyhow::Result<()> {
+        let graph_edges: HashSet<usize> =
+            self.tasks.node_identifiers().map(|i| i.index()).collect();
+        // Make sure all the listed predecessors exist within the graph.
+        if !related_indices.iter().all(|i| graph_edges.contains(i)) {
+            bail!("Some index in the predecessors list doesn't exist in the graph");
+        }
+
+        // Make sure the task index exists withing the graph.
+        if !graph_edges.contains(&task_index) {
+            bail!(format!(
+                "Task index {task_index} doesn't exist in the graph"
+            ));
+        }
+
         Ok(())
     }
 
@@ -465,10 +548,82 @@ impl Project {
         task_index: usize,
         successors_indices: &[usize],
     ) -> anyhow::Result<()> {
-        self.tasks
-            .update_successors(task_index, successors_indices)
-            .context("Failed to update successors in the project")?;
+        self.validate_indices(task_index, successors_indices)?;
+
+        // Update successors in a cloned data structure for tasks.
+        // If this gives an error, the actual data structure won't be polluted.
+        // TODO: benchmark and see if there is a better way to do this without cloning.
+        let mut tasks_clone = self.tasks.clone();
+        for &i in successors_indices {
+            tasks_clone
+                .add_edge(task_index.into(), i.into(), TimeRelationship::FinishToStart)
+                .context(format!(
+                    "A cycle was detected between tasks {i} and {task_index}"
+                ))?;
+        }
+
+        // Remove all successors.
+        for i in self.successors_indices(task_index).collect::<Vec<usize>>() {
+            self.remove_time_relationship(task_index, i)
+                .expect("It should have been possible to remove a predecessor. This is a bug.");
+        }
+        // Update successors.
+        for &i in successors_indices {
+            self.tasks
+                .add_edge( task_index.into(), i.into(), TimeRelationship::FinishToStart)
+                .context("This shouldn't have happened because the data structure was just checked for cycles.")?;
+        }
         Ok(())
+    }
+
+    /// Adds a subtask to a given task. This relationship means that the parent
+    /// task is completed when all the children are completed. Also, the parent's cost
+    /// and duration is the cumulative cost and duration of the children.
+    ///
+    /// Example
+    ///
+    /// ```
+    /// use planter_core::{project::Project, task::Task};
+    ///
+    /// let task_vec = vec![
+    ///      Task::new("Become world leader".to_owned()),
+    ///      Task::new("Get rich".to_owned()),
+    ///      Task::new("Be evil".to_owned())
+    /// ];
+    /// let mut project = Project::new("World domination".to_owned()).with_tasks(task_vec);
+    ///
+    /// project.add_subtask(0, 1);
+    /// project.add_subtask(0, 2);
+    /// assert_eq!(project.subtasks(0).len(), 2);
+    /// ```
+    pub fn add_subtask(&mut self, parent_index: usize, child_index: usize) {
+        self.subtask_relationships.push(SubtaskRelationship {
+            task: parent_index,
+            subtask: child_index,
+        });
+    }
+
+    /// Gets a list of all the subtasks of the given task.
+    ///
+    /// Example
+    ///
+    /// ```
+    /// use planter_core::{project::Project, task::Task};
+    ///
+    /// let mut project = Project::new("World domination".to_owned());
+    /// project.add_task(Task::new("Become world leader".to_owned()));
+    /// project.add_task(Task::new("Get rich".to_owned()));
+    /// assert_eq!(project.subtasks(0).len(), 0);
+    ///
+    /// project.add_subtask(0, 1);
+    /// assert_eq!(project.subtasks(0).len(), 1);
+    /// ```
+    pub fn subtasks(&self, task_index: usize) -> Vec<usize> {
+        self.subtask_relationships
+            .iter()
+            .filter(|r| r.task == task_index)
+            .map(|r| r.subtask)
+            .collect()
     }
 
     /// Returns the start date of the project.
@@ -653,11 +808,11 @@ mod tests {
         #[test]
         fn update_predecessors_removes_them_if_input_is_empty(mut project in project_strategy()) {
             let mut rng = rng();
-            let task_index1 = rng.random_range(0..project.tasks.count());
+            let task_index1 = rng.random_range(0..project.tasks().count());
             let mut task_index2 = task_index1;
 
             while task_index2 == task_index1 {
-                task_index2 = rng.random_range(0..project.tasks.count());
+                task_index2 = rng.random_range(0..project.tasks().count());
             }
 
             project.update_predecessors(task_index1, &[task_index2]).unwrap();
@@ -669,15 +824,15 @@ mod tests {
         #[test]
         fn update_predecessors_removes_indices_not_present_in_input(mut project in project_strategy()) {
             let mut rng = rng();
-            let task_index1 = rng.random_range(0..project.tasks.count());
+            let task_index1 = rng.random_range(0..project.tasks().count());
             let mut task_index2 = task_index1;
             let mut task_index3 = task_index1;
 
             while task_index2 == task_index1 {
-                task_index2 = rng.random_range(0..project.tasks.count());
+                task_index2 = rng.random_range(0..project.tasks().count());
             }
             while task_index3 == task_index1 || task_index3 == task_index2 {
-                task_index3 = rng.random_range(0..project.tasks.count());
+                task_index3 = rng.random_range(0..project.tasks().count());
             }
 
             project.update_predecessors(task_index1, &[task_index2, task_index3]).unwrap();
@@ -691,11 +846,11 @@ mod tests {
         #[test]
         fn update_predecessors_works(mut project in project_strategy()) {
             let mut rng = rng();
-            let task_index1 = rng.random_range(0..project.tasks.count());
+            let task_index1 = rng.random_range(0..project.tasks().count());
             let mut task_index2 = task_index1;
 
             while task_index2 == task_index1 {
-                task_index2 = rng.random_range(0..project.tasks.count());
+                task_index2 = rng.random_range(0..project.tasks().count());
             }
 
             project.update_predecessors(task_index1, &[task_index2]).unwrap();
@@ -708,11 +863,11 @@ mod tests {
         #[test]
         fn update_successors_works(mut project in project_strategy()) {
             let mut rng = rng();
-            let task_index1 = rng.random_range(0..project.tasks.count());
+            let task_index1 = rng.random_range(0..project.tasks().count());
             let mut task_index2 = task_index1;
 
             while task_index2 == task_index1 {
-                task_index2 = rng.random_range(0..project.tasks.count());
+                task_index2 = rng.random_range(0..project.tasks().count());
             }
 
             project.update_successors(task_index1, &[task_index2]).unwrap();
@@ -725,11 +880,11 @@ mod tests {
         #[test]
         fn update_successors_removes_them_if_input_is_empty(mut project in project_strategy()) {
             let mut rng = rng();
-            let task_index1 = rng.random_range(0..project.tasks.count());
+            let task_index1 = rng.random_range(0..project.tasks().count());
             let mut task_index2 = task_index1;
 
             while task_index2 == task_index1 {
-                task_index2 = rng.random_range(0..project.tasks.count());
+                task_index2 = rng.random_range(0..project.tasks().count());
             }
 
             project.update_successors(task_index1, &[task_index2]).unwrap();
@@ -741,15 +896,15 @@ mod tests {
         #[test]
         fn update_successors_removes_indices_not_present_in_input(mut project in project_strategy()) {
             let mut rng = rng();
-            let task_index1 = rng.random_range(0..project.tasks.count());
+            let task_index1 = rng.random_range(0..project.tasks().count());
             let mut task_index2 = task_index1;
             let mut task_index3 = task_index1;
 
             while task_index2 == task_index1 {
-                task_index2 = rng.random_range(0..project.tasks.count());
+                task_index2 = rng.random_range(0..project.tasks().count());
             }
             while task_index3 == task_index1 || task_index3 == task_index2 {
-                task_index3 = rng.random_range(0..project.tasks.count());
+                task_index3 = rng.random_range(0..project.tasks().count());
             }
 
             project.update_successors(task_index1, &[task_index2, task_index3]).unwrap();
