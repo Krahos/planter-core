@@ -56,6 +56,7 @@ impl PositiveDuration {
     /// let duration = PositiveDuration::parse_from_str("random garbage").unwrap();
     /// ```
     #[allow(clippy::expect_used)]
+    #[allow(clippy::unwrap_in_result)]
     pub fn parse_from_str(s: &str) -> Result<Self, DurationError> {
         let bytes = s.as_bytes();
         static RE: Lazy<Regex> = Lazy::new(|| {

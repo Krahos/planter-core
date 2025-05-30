@@ -6,7 +6,7 @@ authors = ["Sebastiano Giordano"]
 description = "Domain logic for PlanTer, a project management application"
 documentation = "https://docs.rs/planter-core"
 keywords = ["project_management"]
-license = "MIT OR Apache-2.0"
+license = "Agpl-3.0"
 readme = "README.md"
 repository = "https://github.com/krahos/planter-core"
 

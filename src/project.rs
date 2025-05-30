@@ -217,6 +217,9 @@ impl Project {
     ///
     /// * `i` - The index of the task.
     ///
+    /// # Errors
+    /// TODO!
+    ///
     /// # Example
     ///
     /// ```
@@ -309,6 +312,9 @@ impl Project {
 
     /// Adds a relationship betwen tasks, where one is the predecessor and the other one a successor.
     ///
+    /// # Errors
+    /// TODO!
+    ///
     /// # Example
     ///
     /// ```
@@ -334,6 +340,9 @@ impl Project {
     }
 
     /// Removes a relationship betwen tasks, where one is the predecessor and the other one a successor.
+    ///
+    /// # Errors
+    /// TODO!
     ///
     /// # Example
     ///
@@ -452,6 +461,9 @@ impl Project {
     /// * `task_index` - The index whose predecessors need to be updated.
     /// * `predecessors_indices` - The indices of the predecessors.
     ///
+    /// # Errors
+    /// TODO!
+    ///
     /// # Example
     ///
     /// ```
@@ -491,7 +503,7 @@ impl Project {
             .collect::<Vec<usize>>()
         {
             self.remove_time_relationship(i, task_index)
-                .expect("It should have been possible to remove a predecessor. This is a bug.");
+                .context("It should have been possible to remove a predecessor. This is a bug.")?;
         }
         // Update predecessors.
         for &i in predecessors_indices {
@@ -529,6 +541,9 @@ impl Project {
     /// * `task_index` - The index whose successors need to be updated.
     /// * `successors_indices` - The indices of the successors.
     ///
+    /// # Errors
+    /// TODO!
+    ///
     /// # Example
     ///
     /// ```
@@ -565,7 +580,7 @@ impl Project {
         // Remove all successors.
         for i in self.successors_indices(task_index).collect::<Vec<usize>>() {
             self.remove_time_relationship(task_index, i)
-                .expect("It should have been possible to remove a predecessor. This is a bug.");
+                .context("It should have been possible to remove a predecessor. This is a bug.")?;
         }
         // Update successors.
         for &i in successors_indices {
