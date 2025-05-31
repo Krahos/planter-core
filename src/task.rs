@@ -384,7 +384,6 @@ pub mod test_utils {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
     use chrono::Duration;
     use proptest::prelude::*;

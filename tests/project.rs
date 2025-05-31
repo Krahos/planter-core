@@ -1,7 +1,6 @@
 //! Module containing tests for the `Project` struct.
 
-#![allow(clippy::unwrap_used)]
-
+use anyhow::Context;
 use chrono::Utc;
 use planter_core::{
     person::{Name, Person},
@@ -16,7 +15,7 @@ use planter_core::{
 /// a name, optionally a description, and a start date. The project is kept
 /// mutable and the user can add/remove tasks, resources, stakeholders, and
 /// other relevant information.
-fn test_project() {
+fn test_project() -> anyhow::Result<()> {
     // Initialize a project with a name, description, and start date.
     let start_date = Utc::now();
     let mut project = Project::new("World domination".to_owned())
@@ -42,11 +41,11 @@ fn test_project() {
     // Add time relationships between tasks of the project.
     project
         .add_time_relationship(0, 1, TimeRelationship::StartToFinish)
-        .expect("Tasks to exist and circular dependencies not present");
+        .context("Tasks don't exist or circular dependencies detected")?;
 
     project
         .add_time_relationship(0, 4, TimeRelationship::StartToFinish)
-        .expect("Tasks to exist and circular dependencies not present");
+        .context("Tasks don't exist or circular dependencies detected")?;
 
     // Add a non consumable material to the project
     project.add_resource(Resource::Material(Material::NonConsumable(
@@ -59,13 +58,19 @@ fn test_project() {
 
     // Add a personnel resource to the project
     project.add_resource(Resource::Personnel {
-        person: Person::new(Name::parse("Sebastiano".to_owned(), "Giordano".to_owned()).unwrap()),
+        person: Person::new(
+            Name::parse("Sebastiano".to_owned(), "Giordano".to_owned())
+                .context("Failed to parse a name.")?,
+        ),
         hourly_rate: None,
     });
     assert_eq!(project.resources().len(), 3);
 
     // Add stakeholders to the project
-    let person = Person::new(Name::parse("Margherita".to_owned(), "Hack".to_owned()).unwrap());
+    let person = Person::new(
+        Name::parse("Margherita".to_owned(), "Hack".to_owned())
+            .context("Failed to parse a name")?,
+    );
     project.add_stakeholder(Stakeholder::Individual {
         person,
         description: Some("She could try to stop me".to_owned()),
@@ -75,4 +80,6 @@ fn test_project() {
         description: Some("They might decide to buy me more stimpacks".to_owned()),
     });
     assert_eq!(project.stakeholders().len(), 2);
+
+    Ok(())
 }
