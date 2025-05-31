@@ -1,6 +1,6 @@
 use crate::person::Person;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 /// Represents a resource that can be used in a project. A resource can be either a material or personnel.
 pub enum Resource {
     /// Represents a material resource that can be used in a project.
@@ -14,7 +14,7 @@ pub enum Resource {
     },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 /// Represents a material resource that can be used in a project.
 /// It can be either consumable or non-consumable.
 pub enum Material {
@@ -24,7 +24,7 @@ pub enum Material {
     NonConsumable(NonConsumable),
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 /// Represents a consumable material resource that can be used in a project.
 pub struct Consumable {
     /// Name of the consumable material.
@@ -35,7 +35,7 @@ pub struct Consumable {
     cost_per_unit: Option<u16>,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 /// Represents a non-consumable material resource that can be used in a project.
 pub struct NonConsumable {
     /// Name of the non-consumable material.
@@ -61,7 +61,7 @@ impl Consumable {
     /// ```
     /// use planter_core::resources::Consumable;
     ///
-    /// let consumable = Consumable::new("Steel".to_string());
+    /// let consumable = Consumable::new("Steel".to_owned());
     /// assert_eq!(consumable.name(), "Steel");
     /// ```
     pub fn name(&self) -> &str {
@@ -73,7 +73,7 @@ impl Consumable {
     /// ```
     /// use planter_core::resources::Consumable;
     ///
-    /// let consumable = Consumable::new("Steel".to_string());
+    /// let consumable = Consumable::new("Steel".to_owned());
     /// assert_eq!(consumable.quantity(), None);
     /// ```
     pub fn quantity(&self) -> Option<u16> {
@@ -85,7 +85,7 @@ impl Consumable {
     /// ```
     /// use planter_core::resources::Consumable;
     ///
-    /// let consumable = Consumable::new("Steel".to_string());
+    /// let consumable = Consumable::new("Steel".to_owned());
     /// assert_eq!(consumable.cost_per_unit(), None);
     /// ```
     pub fn cost_per_unit(&self) -> Option<u16> {
@@ -108,7 +108,7 @@ impl NonConsumable {
     /// ```
     /// use planter_core::resources::NonConsumable;
     ///
-    /// let non_consumable = NonConsumable::new("Steel".to_string());
+    /// let non_consumable = NonConsumable::new("Steel".to_owned());
     /// assert_eq!(non_consumable.name(), "Steel");
     /// ```
     pub fn name(&self) -> &str {
@@ -120,7 +120,7 @@ impl NonConsumable {
     /// ```
     /// use planter_core::resources::NonConsumable;
     ///
-    /// let non_consumable = NonConsumable::new("Steel".to_string());
+    /// let non_consumable = NonConsumable::new("Steel".to_owned());
     /// assert_eq!(non_consumable.quantity(), None);
     /// ```
     pub fn quantity(&self) -> Option<u16> {
@@ -132,7 +132,7 @@ impl NonConsumable {
     /// ```
     /// use planter_core::resources::NonConsumable;
     ///
-    /// let non_consumable = NonConsumable::new("Steel".to_string());
+    /// let non_consumable = NonConsumable::new("Steel".to_owned());
     /// assert_eq!(non_consumable.hourly_rate(), None);
     /// ```
     pub fn hourly_rate(&self) -> Option<u16> {
