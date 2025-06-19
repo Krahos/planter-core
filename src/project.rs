@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use anyhow::{Context, bail};
+use bon::{Builder, builder};
 use chrono::{DateTime, Utc};
 use daggy::{
     Dag,
@@ -12,7 +13,8 @@ use daggy::{
 
 use crate::{resources::Resource, stakeholders::Stakeholder, task::Task};
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Builder)]
+#[builder(on(String, into))]
 /// Represents a project with a name and a list of resources.
 pub struct Project {
     /// The name of the project.
@@ -22,11 +24,19 @@ pub struct Project {
     /// The start date of the project.
     start_date: Option<DateTime<Utc>>,
     /// The tasks associated with the project.
+    #[builder(default, with = |tasks: impl IntoIterator<Item = Task>| {
+        let mut dag = Dag::new();
+        tasks.into_iter().for_each(|t| _  = dag.add_node(t));
+        dag
+    })]
     tasks: Dag<Task, TimeRelationship, usize>,
+    #[builder(default)]
     subtask_relationships: Vec<SubtaskRelationship>,
     /// The list of resources associated with the project.
+    #[builder(default)]
     resources: Vec<Resource>,
     /// The list of stakeholders associated with the project.
+    #[builder(default)]
     stakeholders: Vec<Stakeholder>,
 }
 
@@ -67,12 +77,12 @@ impl Project {
     /// ```
     /// use planter_core::project::Project;
     ///
-    /// let project = Project::new("World domination".to_owned());
+    /// let project = Project::new("World domination");
     /// assert_eq!(project.name(), "World domination");
     /// ```
-    pub fn new(name: String) -> Self {
+    pub fn new(name: impl Into<String>) -> Self {
         Self {
-            name,
+            name: name.into(),
             description: None,
             start_date: None,
             resources: Vec::new(),
@@ -89,51 +99,11 @@ impl Project {
     /// ```
     /// use planter_core::project::Project;
     ///
-    /// let project = Project::new("World domination".to_owned());
+    /// let project = Project::new("World domination");
     /// assert_eq!(project.name(), "World domination");
     /// ```
     pub fn name(&self) -> &str {
         &self.name
-    }
-
-    /// Adds a description to the project.
-    ///
-    /// # Arguments
-    ///
-    /// * `description` - The description to add to the project.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use planter_core::project::Project;
-    ///
-    /// let project = Project::new("World domination".to_owned()).with_description("This is a project".to_owned());
-    /// assert_eq!(project.description(), Some("This is a project"));
-    /// ```
-    pub fn with_description(mut self, description: String) -> Self {
-        self.description = Some(description);
-        self
-    }
-
-    /// Adds a start date to the project.
-    ///
-    /// # Arguments
-    ///
-    /// * `start_date` - The start date to add to the project.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use planter_core::project::Project;
-    /// use chrono::Utc;
-    ///
-    /// let start_date = Utc::now();
-    /// let project = Project::new("World domination".to_owned()).with_start_date(start_date);
-    /// assert_eq!(project.start_date(), Some(start_date));
-    /// ```
-    pub fn with_start_date(mut self, start_date: DateTime<Utc>) -> Self {
-        self.start_date = Some(start_date);
-        self
     }
 
     /// Returns the description of the project.
@@ -143,52 +113,11 @@ impl Project {
     /// ```
     /// use planter_core::project::Project;
     ///
-    /// let project = Project::new("World domination".to_owned());
+    /// let project = Project::new("World domination");
     /// assert_eq!(project.description(), None);
     /// ```
     pub fn description(&self) -> Option<&str> {
         self.description.as_deref()
-    }
-
-    /// Adds a task to the project.
-    ///
-    /// # Arguments
-    ///
-    /// * `task` - An already created task.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use planter_core::{project::Project, task::Task};
-    ///
-    /// let task = Task::new("Become world leader".to_owned());
-    /// let project = Project::new("World domination".to_owned()).with_task(task);
-    ///
-    /// assert_eq!(project.task(0).unwrap().name(), "Become world leader");
-    ///
-    /// ```
-    pub fn with_task(mut self, task: Task) -> Self {
-        self.tasks.add_node(task);
-        self
-    }
-
-    /// Adds a collection of tasks to the project.
-    ///
-    /// # Arguments
-    ///
-    /// * `start_date` - The start date to add to the project.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use planter_core::{project::Project, task::Task};
-    ///
-    /// let tasks = vec![Task::new("Become world leader".to_owned()), Task::new("Get rich".to_owned())];
-    /// let project = Project::new("World domination".to_owned()).with_tasks(tasks);
-    /// assert_eq!(project.tasks().count(), 2);
-    /// ```
-    pub fn with_tasks(self, tasks: impl IntoIterator<Item = Task>) -> Self {
-        tasks.into_iter().fold(self, Self::with_task)
     }
 
     /// Adds a task to the project.
@@ -202,9 +131,9 @@ impl Project {
     /// ```
     /// use planter_core::{project::Project, task::Task};
     ///
-    /// let mut project = Project::new("World domination".to_owned());
+    /// let mut project = Project::new("World domination");
     /// assert_eq!(project.tasks().count(), 0);
-    /// project.add_task(Task::new("Become world leader".to_owned()));
+    /// project.add_task(Task::new("Become world leader"));
     /// assert_eq!(project.tasks().count(), 1);
     /// ```
     pub fn add_task(&mut self, task: Task) {
@@ -225,8 +154,8 @@ impl Project {
     /// ```
     /// use planter_core::{project::Project, task::Task};
     ///
-    /// let mut project = Project::new("World domination".to_owned());
-    /// project.add_task(Task::new("Become world leader".to_owned()));
+    /// let mut project = Project::new("World domination");
+    /// project.add_task(Task::new("Become world leader"));
     /// assert_eq!(project.tasks().count(), 1);
     /// assert!(project.rm_task(0).is_ok());
     /// assert_eq!(project.tasks().count(), 0);
@@ -249,9 +178,9 @@ impl Project {
     /// ```
     /// use planter_core::{project::Project, task::Task};
     ///
-    /// let mut project = Project::new("World domination".to_owned());
-    /// project.add_task(Task::new("Become world leader".to_owned()));
-    /// assert_eq!(project.task(0).unwrap().name(), "Become world leader".to_owned());
+    /// let mut project = Project::new("World domination");
+    /// project.add_task(Task::new("Become world leader"));
+    /// assert_eq!(project.task(0).unwrap().name(), "Become world leader");
     /// ```
     pub fn task(&self, index: usize) -> Option<&Task> {
         self.tasks.node_weight(index.into())
@@ -268,13 +197,13 @@ impl Project {
     /// ```
     /// use planter_core::{project::Project, task::Task};
     ///
-    /// let mut project = Project::new("World domination".to_owned());
-    /// project.add_task(Task::new("Become world leader".to_owned()));
+    /// let mut project = Project::new("World domination");
+    /// project.add_task(Task::new("Become world leader"));
     /// let task = project.task_mut(0).unwrap();
     /// assert_eq!(task.name(), "Become world leader");
     ///
-    /// task.edit_name("Become world's biggest loser".to_owned());
-    /// assert_eq!(task.name(), "Become world's biggest loser".to_owned())
+    /// task.edit_name("Become world's biggest loser");
+    /// assert_eq!(task.name(), "Become world's biggest loser")
     /// ```
     pub fn task_mut(&mut self, index: usize) -> Option<&mut Task> {
         self.tasks.node_weight_mut(index.into())
@@ -287,8 +216,8 @@ impl Project {
     /// ```
     /// use planter_core::{project::Project, task::Task};
     ///
-    /// let mut project = Project::new("World domination".to_owned());
-    /// project.add_task(Task::new("Become world leader".to_owned()));
+    /// let mut project = Project::new("World domination");
+    /// project.add_task(Task::new("Become world leader"));
     /// assert_eq!(project.tasks().count(), 1);
     /// ```
     pub fn tasks(&self) -> impl Iterator<Item = &Task> {
@@ -302,8 +231,8 @@ impl Project {
     /// ```
     /// use planter_core::{project::Project, task::Task};
     ///
-    /// let mut project = Project::new("World domination".to_owned());
-    /// project.add_task(Task::new("Become world leader".to_owned()));
+    /// let mut project = Project::new("World domination");
+    /// project.add_task(Task::new("Become world leader"));
     /// assert_eq!(project.tasks().count(), 1);
     /// ```
     pub fn tasks_mut(&mut self) -> impl Iterator<Item = &mut Task> {
@@ -320,12 +249,12 @@ impl Project {
     /// ```
     /// use planter_core::{project::{Project, TimeRelationship}, task::Task};
     ///
-    /// let mut project = Project::new("World domination".to_owned());
-    /// project.add_task(Task::new("Get rich".to_owned()));
-    /// project.add_task(Task::new("Become world leader".to_owned()));
+    /// let mut project = Project::new("World domination");
+    /// project.add_task(Task::new("Get rich"));
+    /// project.add_task(Task::new("Become world leader"));
     /// project.add_time_relationship(0, 1, TimeRelationship::default());
     ///
-    /// assert_eq!(project.successors(0).next().unwrap().name(), "Become world leader".to_owned())
+    /// assert_eq!(project.successors(0).next().unwrap().name(), "Become world leader")
     /// ```
     pub fn add_time_relationship(
         &mut self,
@@ -349,9 +278,9 @@ impl Project {
     /// ```
     /// use planter_core::{project::{Project, TimeRelationship}, task::Task};
     ///
-    /// let mut project = Project::new("World domination".to_owned());
-    /// project.add_task(Task::new("Get rich".to_owned()));
-    /// project.add_task(Task::new("Become world leader".to_owned()));
+    /// let mut project = Project::new("World domination");
+    /// project.add_task(Task::new("Get rich"));
+    /// project.add_task(Task::new("Become world leader"));
     /// project.add_time_relationship(0, 1, TimeRelationship::default());
     /// project.remove_time_relationship(0, 1);
     ///
@@ -380,12 +309,12 @@ impl Project {
     /// ```
     /// use planter_core::{project::{Project, TimeRelationship}, task::Task};
     ///
-    /// let mut project = Project::new("World domination".to_owned());
-    /// project.add_task(Task::new("Get rich".to_owned()));
-    /// project.add_task(Task::new("Become world leader".to_owned()));
+    /// let mut project = Project::new("World domination");
+    /// project.add_task(Task::new("Get rich"));
+    /// project.add_task(Task::new("Become world leader"));
     /// project.add_time_relationship(0, 1, TimeRelationship::default());
     ///
-    /// assert_eq!(project.successors(0).next().unwrap().name(), "Become world leader".to_owned())
+    /// assert_eq!(project.successors(0).next().unwrap().name(), "Become world leader")
     /// ```
     pub fn successors(&self, node_index: usize) -> impl Iterator<Item = &Task> {
         self.tasks
@@ -400,9 +329,9 @@ impl Project {
     /// ```
     /// use planter_core::{project::{Project, TimeRelationship}, task::Task};
     ///
-    /// let mut project = Project::new("World domination".to_owned());
-    /// project.add_task(Task::new("Get rich".to_owned()));
-    /// project.add_task(Task::new("Become world leader".to_owned()));
+    /// let mut project = Project::new("World domination");
+    /// project.add_task(Task::new("Get rich"));
+    /// project.add_task(Task::new("Become world leader"));
     /// project.add_time_relationship(0, 1, TimeRelationship::default());
     ///
     /// assert_eq!(project.successors_indices(0).next().unwrap(), 1)
@@ -420,12 +349,12 @@ impl Project {
     /// ```
     /// use planter_core::{project::{Project, TimeRelationship}, task::Task};
     ///
-    /// let mut project = Project::new("World domination".to_owned());
-    /// project.add_task(Task::new("Get rich".to_owned()));
-    /// project.add_task(Task::new("Become world leader".to_owned()));
+    /// let mut project = Project::new("World domination");
+    /// project.add_task(Task::new("Get rich"));
+    /// project.add_task(Task::new("Become world leader"));
     /// project.add_time_relationship(1, 0, TimeRelationship::default());
     ///
-    /// assert_eq!(project.predecessors(0).next().unwrap().name(), "Become world leader".to_owned())
+    /// assert_eq!(project.predecessors(0).next().unwrap().name(), "Become world leader")
     /// ```
     pub fn predecessors(&self, node_index: usize) -> impl Iterator<Item = &Task> {
         self.tasks
@@ -440,9 +369,9 @@ impl Project {
     /// ```
     /// use planter_core::{project::{Project, TimeRelationship}, task::Task};
     ///
-    /// let mut project = Project::new("World domination".to_owned());
-    /// project.add_task(Task::new("Get rich".to_owned()));
-    /// project.add_task(Task::new("Become world leader".to_owned()));
+    /// let mut project = Project::new("World domination");
+    /// project.add_task(Task::new("Get rich"));
+    /// project.add_task(Task::new("Become world leader"));
     /// project.add_time_relationship(1, 0, TimeRelationship::default());
     ///
     /// assert_eq!(project.predecessors_indices(0).next().unwrap(), 1)
@@ -470,11 +399,11 @@ impl Project {
     /// use planter_core::{project::Project, task::Task};
     ///
     /// let tasks = vec![
-    ///      Task::new("Become world leader".to_owned()),
-    ///      Task::new("Get rich".to_owned()),
-    ///      Task::new("Be evil".to_owned())
+    ///      Task::new("Become world leader"),
+    ///      Task::new("Get rich"),
+    ///      Task::new("Be evil")
     /// ];
-    /// let mut project = Project::new("World domination".to_owned()).with_tasks(tasks);
+    /// let mut project = Project::builder().name("World domination").tasks(tasks).build();
     ///
     /// project.update_predecessors(2, &[0, 1]);
     /// assert_eq!(project.predecessors(2).count(), 2);
@@ -550,11 +479,11 @@ impl Project {
     /// use planter_core::{project::Project, task::Task};
     ///
     /// let tasks = vec![
-    ///      Task::new("Become world leader".to_owned()),
-    ///      Task::new("Get rich".to_owned()),
-    ///      Task::new("Be evil".to_owned())
+    ///      Task::new("Become world leader"),
+    ///      Task::new("Get rich"),
+    ///      Task::new("Be evil")
     /// ];
-    /// let mut project = Project::new("World domination".to_owned()).with_tasks(tasks);
+    /// let mut project = Project::builder().name("World domination").tasks(tasks).build();
     ///
     /// project.update_successors(0, &[1, 2]);
     /// assert_eq!(project.successors(0).count(), 2);
@@ -600,12 +529,12 @@ impl Project {
     /// ```
     /// use planter_core::{project::Project, task::Task};
     ///
-    /// let task_vec = vec![
-    ///      Task::new("Become world leader".to_owned()),
-    ///      Task::new("Get rich".to_owned()),
-    ///      Task::new("Be evil".to_owned())
+    /// let tasks = vec![
+    ///      Task::new("Become world leader"),
+    ///      Task::new("Get rich"),
+    ///      Task::new("Be evil")
     /// ];
-    /// let mut project = Project::new("World domination".to_owned()).with_tasks(task_vec);
+    /// let mut project = Project::builder().name("World domination").tasks(tasks).build();
     ///
     /// project.add_subtask(0, 1);
     /// project.add_subtask(0, 2);
@@ -625,9 +554,9 @@ impl Project {
     /// ```
     /// use planter_core::{project::Project, task::Task};
     ///
-    /// let mut project = Project::new("World domination".to_owned());
-    /// project.add_task(Task::new("Become world leader".to_owned()));
-    /// project.add_task(Task::new("Get rich".to_owned()));
+    /// let mut project = Project::new("World domination");
+    /// project.add_task(Task::new("Become world leader"));
+    /// project.add_task(Task::new("Get rich"));
     /// assert_eq!(project.subtasks(0).len(), 0);
     ///
     /// project.add_subtask(0, 1);
@@ -650,7 +579,7 @@ impl Project {
     /// use chrono::Utc;
     ///
     /// let start_date = Utc::now();
-    /// let project = Project::new("World domination".to_owned()).with_start_date(start_date);
+    /// let mut project = Project::builder().name("World domination").start_date(start_date).build();
     /// assert_eq!(project.start_date(), Some(start_date));
     /// ```
     pub fn start_date(&self) -> Option<DateTime<Utc>> {
@@ -666,17 +595,66 @@ impl Project {
     /// # Example
     ///
     /// ```
-    /// use planter_core::{resources::Resource, project::Project, person::{Person, Name}};
+    /// use planter_core::{resources::Resource, project::Project, person::Person};
     ///
-    /// let mut project = Project::new("World domination".to_owned());
+    /// let mut project = Project::new("World domination");
     /// project.add_resource(Resource::Personnel {
-    ///     person: Person::new(Name::parse("Sebastiano".to_owned(), "Giordano".to_owned()).unwrap()),
+    ///     person: Person::new("Sebastiano", "Giordano").unwrap(),
     ///     hourly_rate: None,
     /// });
     /// assert_eq!(project.resources().len(), 1);
     /// ```
     pub fn add_resource(&mut self, resource: Resource) {
         self.resources.push(resource);
+    }
+
+    /// Get a reference to a resource used in the project.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use planter_core::{resources::Resource, project::Project, person::Person};
+    ///
+    /// let mut project = Project::new("World domination");
+    /// project.add_resource(Resource::Personnel {
+    ///     person: Person::new("Sebastiano", "Giordano").unwrap(),
+    ///     hourly_rate: None,
+    /// });
+    ///
+    /// assert!(project.resource(0).is_some());
+    /// # assert!(project.resource(1).is_none());
+    /// ```
+    pub fn resource(&self, index: usize) -> Option<&Resource> {
+        self.resources.get(index)
+    }
+
+    /// Get a mutable reference to a resource used in the project.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use planter_core::{resources::Resource, project::Project, person::Person};
+    ///
+    /// let mut project = Project::new("World domination");
+    /// project.add_resource(Resource::Personnel {
+    ///     person: Person::new("Sebastiano", "Giordano").unwrap(),
+    ///     hourly_rate: None,
+    /// });
+    ///
+    /// let resource = project.resource_mut(0).unwrap();
+    /// match resource {
+    ///   Resource::Material(_) => panic!(),
+    ///   Resource::Personnel {
+    ///     person,
+    ///     ..
+    ///   } => {
+    ///     person.update_first_name("Alessandro");
+    ///     assert_eq!(person.first_name(), "Alessandro");
+    ///   }
+    /// }
+    /// ```
+    pub fn resource_mut(&mut self, index: usize) -> Option<&mut Resource> {
+        self.resources.get_mut(index)
     }
 
     /// Returns a reference to the list of resources associated with the project.
@@ -686,9 +664,9 @@ impl Project {
     /// ```
     /// use planter_core::{resources::{Resource, Material, NonConsumable}, project::Project};
     ///
-    /// let mut project = Project::new("World domination".to_owned());
+    /// let mut project = Project::new("World domination");
     /// project.add_resource(Resource::Material(Material::NonConsumable(
-    ///    NonConsumable::new("Crowbar".to_owned()),
+    ///    NonConsumable::new("Crowbar"),
     /// )));
     /// assert_eq!(project.resources().len(), 1);
     /// ```
@@ -705,10 +683,10 @@ impl Project {
     /// # Example
     ///
     /// ```
-    /// use planter_core::{stakeholders::Stakeholder, project::Project, person::{Person, Name}};
+    /// use planter_core::{stakeholders::Stakeholder, project::Project, person::Person};
     ///
-    /// let mut project = Project::new("World domination".to_owned());
-    /// let person = Person::new(Name::parse("Margherita".to_owned(), "Hack".to_owned()).unwrap());
+    /// let mut project = Project::new("World domination");
+    /// let person = Person::new("Margherita", "Hack").unwrap();
     /// project.add_stakeholder(Stakeholder::Individual {
     ///   person,
     ///   description: None,
@@ -724,10 +702,10 @@ impl Project {
     /// # Example
     ///
     /// ```
-    /// use planter_core::{stakeholders::Stakeholder, project::Project, person::{Person, Name}};
+    /// use planter_core::{stakeholders::Stakeholder, project::Project, person::Person};
     ///
-    /// let mut project = Project::new("World domination".to_owned());
-    /// let person = Person::new(Name::parse("Margherita".to_owned(), "Hack".to_owned()).unwrap());
+    /// let mut project = Project::new("World domination");
+    /// let person = Person::new("Margherita", "Hack").unwrap();
     /// project.add_stakeholder(Stakeholder::Individual {
     ///   person,
     ///   description: None,
@@ -770,7 +748,7 @@ pub mod test_utils {
     pub fn project_graph_strategy() -> impl Strategy<Value = Project> {
         (".*", tasks_strategy()).prop_map(|(n, tasks)| {
             let indices = 0..tasks.len();
-            let mut project = Project::new(n).with_tasks(tasks);
+            let mut project = Project::builder().name(n).tasks(tasks).build();
 
             let mut previous = None;
             indices.for_each(|current| {
@@ -785,7 +763,8 @@ pub mod test_utils {
 
     /// Generate a random `[Project]` with `[Task]`s, but no predecessors/successors relationships.
     pub fn project_strategy() -> impl Strategy<Value = Project> {
-        (".*", tasks_strategy()).prop_map(|(n, tasks)| Project::new(n).with_tasks(tasks))
+        (".*", tasks_strategy())
+            .prop_map(|(n, tasks)| Project::builder().name(n).tasks(tasks).build())
     }
 }
 

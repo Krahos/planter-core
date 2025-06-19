@@ -48,9 +48,9 @@ pub struct NonConsumable {
 
 impl Consumable {
     /// Creates a new consumable material resource.
-    pub fn new(name: String) -> Self {
+    pub fn new(name: impl Into<String>) -> Self {
         Consumable {
-            name,
+            name: name.into(),
             quantity: None,
             cost_per_unit: None,
         }
@@ -95,9 +95,9 @@ impl Consumable {
 
 impl NonConsumable {
     /// Creates a new non-consumable material resource.
-    pub fn new(name: String) -> Self {
+    pub fn new(name: impl Into<String>) -> Self {
         NonConsumable {
-            name,
+            name: name.into(),
             quantity: None,
             hourly_rate: None,
         }
