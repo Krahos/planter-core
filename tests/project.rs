@@ -3,7 +3,7 @@
 use anyhow::Context;
 use chrono::Utc;
 use planter_core::{
-    person::{Name, Person},
+    person::Person,
     project::{Project, TimeRelationship},
     resources::{Consumable, Material, NonConsumable, Resource},
     stakeholders::Stakeholder,
@@ -18,18 +18,18 @@ use planter_core::{
 fn test_project() -> anyhow::Result<()> {
     // Initialize a project with a name, description, and start date.
     let start_date = Utc::now();
-    let mut project = Project::new("World domination".to_owned())
-        .with_description(
-            "My second attempt to conquer the world with a crowbar and a stimpack".to_owned(),
-        )
-        .with_start_date(start_date);
+    let mut project = Project::builder()
+        .name("World domination")
+        .description("My second attempt to conquer the world with a crowbar and a stimpack")
+        .start_date(start_date)
+        .build();
 
     // Add tasks to the project.
-    project.add_task(Task::new("Become world leader".to_owned()));
-    project.add_task(Task::new("Get rich".to_owned()));
-    project.add_task(Task::new("Open a proprietary software house".to_owned()));
-    project.add_task(Task::new("Prey on free software projects".to_owned()));
-    project.add_task(Task::new("Profit".to_owned()));
+    project.add_task(Task::new("Find a crowbar"));
+    project.add_task(Task::new("Find a stimpack"));
+    project.add_task(Task::new("Open a proprietary software house"));
+    project.add_task(Task::new("Prey on free software projects"));
+    project.add_task(Task::new("Profit"));
     assert_eq!(project.tasks().count(), 5);
 
     // Add subtask relatonships to the project.
@@ -49,28 +49,22 @@ fn test_project() -> anyhow::Result<()> {
 
     // Add a non consumable material to the project
     project.add_resource(Resource::Material(Material::NonConsumable(
-        NonConsumable::new("Crowbar".to_owned()),
+        NonConsumable::new("Crowbar"),
     )));
     // Add a consumable material to the project
     project.add_resource(Resource::Material(Material::Consumable(Consumable::new(
-        "Stimpack".to_owned(),
+        "Stimpack",
     ))));
 
     // Add a personnel resource to the project
     project.add_resource(Resource::Personnel {
-        person: Person::new(
-            Name::parse("Sebastiano".to_owned(), "Giordano".to_owned())
-                .context("Failed to parse a name.")?,
-        ),
+        person: Person::new("Sebastiano", "Giordano").context("Failed to parse a name.")?,
         hourly_rate: None,
     });
     assert_eq!(project.resources().len(), 3);
 
     // Add stakeholders to the project
-    let person = Person::new(
-        Name::parse("Margherita".to_owned(), "Hack".to_owned())
-            .context("Failed to parse a name")?,
-    );
+    let person = Person::new("Margherita", "Hack").context("Failed to parse a name")?;
     project.add_stakeholder(Stakeholder::Individual {
         person,
         description: Some("She could try to stop me".to_owned()),
