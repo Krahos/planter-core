@@ -1,4 +1,4 @@
-name: Post merge
+name: Release-plz
 
 permissions:
   pull-requests: write
