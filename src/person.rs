@@ -1,3 +1,4 @@
+use anyhow::Context;
 pub use email_address::EmailAddress;
 use nutype::nutype;
 pub use phonenumber::PhoneNumber;
@@ -191,6 +192,11 @@ impl Person {
 
     /// Update the first name of the person.
     ///
+    /// # Errors
+    ///
+    /// It can return an error, if the input `name` can't be converted to
+    /// `NameString`
+    ///
     /// # Examples
     ///
     /// ```
@@ -201,7 +207,8 @@ impl Person {
     /// assert_eq!(person.first_name(), "Margherita");
     /// ```
     pub fn update_first_name(&mut self, name: impl Into<String>) -> anyhow::Result<()> {
-        self.first_name = NameString::try_new(name)?;
+        self.first_name =
+            NameString::try_new(name).context("Input can't be converted into NameString.")?;
         Ok(())
     }
 
@@ -220,6 +227,11 @@ impl Person {
 
     /// Update the last name of the person.
     ///
+    /// # Errors
+    ///
+    /// It can return an error, if the input `name` can't be converted to
+    /// `NameString`
+    ///
     /// # Examples
     ///
     /// ```
@@ -230,7 +242,8 @@ impl Person {
     /// assert_eq!(person.last_name(), "Hack");
     /// ```
     pub fn update_last_name(&mut self, name: impl Into<String>) -> anyhow::Result<()> {
-        self.last_name = NameString::try_new(name)?;
+        self.last_name =
+            NameString::try_new(name).context("Input can't be converted into NameString.")?;
         Ok(())
     }
 }

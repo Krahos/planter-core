@@ -21,7 +21,6 @@ daggy = "0.8.1"
 phonenumber = "0.3.7"
 regex = "1.11.1"
 thiserror = "2.0.12"
-derive_more = { version = "2.0.1", features = ["full"] }
 nutype = "0.6.1"
 email_address = "0.2.9"
 bon = "3.6.4"
