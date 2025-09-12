@@ -64,4 +64,4 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
       - name: Machete
-        uses: bnjbvr/cargo-machete@0.9
+        uses: bnjbvr/cargo-machete@main
