@@ -47,14 +47,25 @@ fn test_project() -> anyhow::Result<()> {
         .add_time_relationship(0, 4, TimeRelationship::StartToFinish)
         .context("Tasks don't exist or circular dependencies detected")?;
 
-    // Add a non consumable material to the project
-    project.add_resource(Resource::Material(Material::NonConsumable(
-        NonConsumable::new("Crowbar"),
-    )));
     // Add a consumable material to the project
     project.add_resource(Resource::Material(Material::Consumable(Consumable::new(
-        "Stimpack",
+        "Crowbar",
     ))));
+
+    // Convert the consumable material into a non consumable
+    project
+        .res_into_nonconsumable(0)
+        .context("Failed to convert consumable into non consumable")?;
+
+    // Add a consumable material to the project
+    project.add_resource(Resource::Material(Material::NonConsumable(
+        NonConsumable::new("Stimpack"),
+    )));
+
+    // Convert the non consumable material into a consumable
+    project
+        .res_into_consumable(0)
+        .context("Failed to convert non consumable into consumable")?;
 
     // Add a personnel resource to the project
     project.add_resource(Resource::Personnel {
@@ -62,6 +73,10 @@ fn test_project() -> anyhow::Result<()> {
         hourly_rate: None,
     });
     assert_eq!(project.resources().len(), 3);
+
+    // Remove a resource from the project
+    project.rm_resource(1);
+    assert_eq!(project.resources().len(), 2);
 
     // Add stakeholders to the project
     let person = Person::new("Margherita", "Hack").context("Failed to parse a name")?;

@@ -10,8 +10,13 @@ use daggy::{
         visit::{IntoNeighborsDirected, IntoNodeIdentifiers},
     },
 };
+use thiserror::Error;
 
-use crate::{resources::Resource, stakeholders::Stakeholder, task::Task};
+use crate::{
+    resources::{Material, Resource},
+    stakeholders::Stakeholder,
+    task::Task,
+};
 
 #[derive(Debug, Default, Builder)]
 #[builder(on(String, into))]
@@ -622,10 +627,39 @@ impl Project {
     /// });
     ///
     /// assert!(project.resource(0).is_some());
-    /// # assert!(project.resource(1).is_none());
     /// ```
     pub fn resource(&self, index: usize) -> Option<&Resource> {
         self.resources.get(index)
+    }
+
+    /// Remove a resource from the project.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the resource index is out of bounds.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use planter_core::{resources::Resource, project::Project, person::Person};
+    ///
+    /// let mut project = Project::new("World domination");
+    /// project.add_resource(Resource::Personnel {
+    ///     person: Person::new("Sebastiano", "Giordano").unwrap(),
+    ///     hourly_rate: None,
+    /// });
+    ///
+    /// assert!(project.resource(0).is_some());
+    /// project.rm_resource(0);
+    /// assert!(project.resource(0).is_none());
+    ///
+    /// let result = std::panic::catch_unwind(move || {
+    ///     project.rm_resource(0);
+    /// });
+    /// assert!(result.is_err());
+    /// ```
+    pub fn rm_resource(&mut self, index: usize) -> Resource {
+        self.resources.remove(index)
     }
 
     /// Get a mutable reference to a resource used in the project.
@@ -674,6 +708,88 @@ impl Project {
         &self.resources
     }
 
+    /// Converts a resource into a `Consumable`, if that's possible.
+    ///
+    /// # Arguments
+    ///
+    /// * resource_index - The index of a `Material`, that's not a `Consumable`
+    ///
+    /// # Errors
+    ///
+    /// * `ResourceConversionError::ResourceNotFound` - If a resource with the specified index does not exist.
+    /// * `ResourceConversionError::ConversionNotPossible` - When trying to convert a resource that's not a `Material`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use planter_core::{resources::{Resource, Material, NonConsumable}, project::Project};
+    ///
+    /// let mut project = Project::new("World domination");
+    /// project.add_resource(Resource::Material(Material::NonConsumable(
+    ///    NonConsumable::new("Crowbar"),
+    /// )));
+    /// assert!(project.res_into_consumable(0).is_ok());
+    /// ```
+    ///
+    pub fn res_into_consumable(
+        &mut self,
+        resource_index: usize,
+    ) -> Result<(), ResourceConversionError> {
+        let res = self
+            .resources
+            .get_mut(resource_index)
+            .ok_or(ResourceConversionError::ResourceNotFound)?;
+        match res {
+            Resource::Material(Material::NonConsumable(non_consumable)) => {
+                *res = Resource::Material(Material::Consumable(non_consumable.clone().into()))
+            }
+            Resource::Material(Material::Consumable(_)) => {}
+            _ => return Err(ResourceConversionError::ConversionNotPossible),
+        }
+        Ok(())
+    }
+
+    /// Converts a resource into a `NonConsumable`, if that's possible.
+    ///
+    /// # Arguments
+    ///
+    /// * resource_index - The index of a `Material`, that's not a `NonConsumable`
+    ///
+    /// # Errors
+    ///
+    /// * `ResourceConversionError::ResourceNotFound` - If a resource with the specified index does not exist.
+    /// * `ResourceConversionError::ConversionNotPossible` - When trying to convert a resource that's not a `Material`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use planter_core::{resources::{Resource, Material, Consumable}, project::Project};
+    ///
+    /// let mut project = Project::new("World domination");
+    /// project.add_resource(Resource::Material(Material::Consumable(
+    ///    Consumable::new("Stimpack"),
+    /// )));
+    /// assert!(project.res_into_nonconsumable(0).is_ok());
+    /// ```
+    pub fn res_into_nonconsumable(
+        &mut self,
+        resource_index: usize,
+    ) -> Result<(), ResourceConversionError> {
+        let res = self
+            .resources
+            .get_mut(resource_index)
+            .ok_or(ResourceConversionError::ResourceNotFound)?;
+
+        match res {
+            Resource::Material(Material::Consumable(consumable)) => {
+                *res = Resource::Material(Material::NonConsumable(consumable.clone().into()));
+            }
+            Resource::Material(Material::NonConsumable(_)) => {}
+            _ => return Err(ResourceConversionError::ConversionNotPossible),
+        }
+        Ok(())
+    }
+
     /// Adds a stakeholder to the project.
     ///
     /// # Arguments
@@ -715,6 +831,17 @@ impl Project {
     pub fn stakeholders(&self) -> &[Stakeholder] {
         &self.stakeholders
     }
+}
+
+/// Represents an error that can occur when trying to convert `Material` resources variants to another variant.
+#[derive(Error, Debug, PartialEq, Eq)]
+pub enum ResourceConversionError {
+    /// Used when trying to convert a resource with an index out of bounds.
+    #[error("The resource with the specified index wasn't found")]
+    ResourceNotFound,
+    /// Used when trying to convert a resource that's not a material, for example personnel.
+    #[error("Tried to convert a resource that's not a material")]
+    ConversionNotPossible,
 }
 
 #[cfg(test)]
@@ -773,7 +900,14 @@ mod tests {
     use proptest::prelude::*;
     use rand::{Rng, rng};
 
-    use crate::project::test_utils::{project_graph_strategy, project_strategy};
+    use crate::{
+        person::Person,
+        project::{
+            Project, ResourceConversionError,
+            test_utils::{project_graph_strategy, project_strategy},
+        },
+        resources::{Consumable, Material, NonConsumable, Resource},
+    };
     proptest! {
         #[test]
         fn update_predecessors_rejects_circular_graphs(mut project in project_graph_strategy()) {
@@ -907,6 +1041,96 @@ mod tests {
             let mut successors = project.successors(task_index1);
             assert_eq!(successors.next(), project.task(task_index2));
             assert!(successors.next().is_none());
+        }
+    }
+
+    #[test]
+    fn res_into_consumable_returns_the_correct_errors() {
+        let mut project = Project::new("World domination");
+
+        project.add_resource(Resource::Personnel {
+            person: Person::new("Sebastiano", "Giordano").unwrap(),
+            hourly_rate: None,
+        });
+
+        // The correct error when trying to convert a reasource that's not a `Material`.
+        assert_eq!(
+            project.res_into_consumable(0),
+            Err(ResourceConversionError::ConversionNotPossible)
+        );
+
+        // The correct error when trying to convert a reasource that does not exist.
+        assert_eq!(
+            project.res_into_consumable(1),
+            Err(ResourceConversionError::ResourceNotFound)
+        );
+
+        // Doesn't return an error when trying to convert a `Consumable` into a `Consumable`.
+        project.add_resource(Resource::Material(Material::Consumable(Consumable::new(
+            "Stimpack",
+        ))));
+
+        assert!(project.res_into_consumable(1).is_ok());
+
+        // Doesn't change the type of the resource when not needed.
+        if let Resource::Material(Material::Consumable(_)) = project.resources()[1] {
+        } else {
+            panic!("It changed the resource type");
+        }
+
+        // It changes it when needed.
+        project.add_resource(Resource::Material(Material::NonConsumable(
+            NonConsumable::new("Crowbar"),
+        )));
+        project.res_into_consumable(2).unwrap();
+        if let Resource::Material(Material::Consumable(_)) = project.resources()[2] {
+        } else {
+            panic!("It didn't change the resource type");
+        }
+    }
+
+    #[test]
+    fn res_into_nonconsumable_returns_the_correct_errors() {
+        let mut project = Project::new("World domination");
+
+        project.add_resource(Resource::Personnel {
+            person: Person::new("Sebastiano", "Giordano").unwrap(),
+            hourly_rate: None,
+        });
+
+        // The correct error when trying to convert a resource that's not a `Material`.
+        assert_eq!(
+            project.res_into_nonconsumable(0),
+            Err(ResourceConversionError::ConversionNotPossible)
+        );
+
+        // The correct error when trying to convert a resource that does not exist.
+        assert_eq!(
+            project.res_into_nonconsumable(1),
+            Err(ResourceConversionError::ResourceNotFound)
+        );
+
+        // Doesn't return an error when trying to convert a `NonConsumable` into a `NonConsumable`.
+        project.add_resource(Resource::Material(Material::NonConsumable(
+            NonConsumable::new("Crowbar"),
+        )));
+
+        assert!(project.res_into_nonconsumable(1).is_ok());
+
+        // Doesn't change the type of the resource when not needed.
+        if let Resource::Material(Material::NonConsumable(_)) = project.resources()[1] {
+        } else {
+            panic!("It changed the resource type");
+        }
+
+        // It changes it when needed.
+        project.add_resource(Resource::Material(Material::Consumable(Consumable::new(
+            "Stimpack",
+        ))));
+        project.res_into_nonconsumable(2).unwrap();
+        if let Resource::Material(Material::NonConsumable(_)) = project.resources()[2] {
+        } else {
+            panic!("It didn't change the resource type");
         }
     }
 }

@@ -54,6 +54,27 @@ pub struct NonConsumable {
     hourly_rate: Option<u16>,
 }
 
+impl Into<NonConsumable> for Consumable {
+    fn into(self) -> NonConsumable {
+        NonConsumable {
+            name: self.name,
+            quantity: self.quantity,
+            cost_per_unit: self.cost_per_unit,
+            hourly_rate: None,
+        }
+    }
+}
+
+impl Into<Consumable> for NonConsumable {
+    fn into(self) -> Consumable {
+        Consumable {
+            name: self.name,
+            quantity: self.quantity,
+            cost_per_unit: self.quantity,
+        }
+    }
+}
+
 impl Material {
     /// Returns a consumable material by default, with the given name.
     pub fn new(name: impl Into<String>) -> Self {
