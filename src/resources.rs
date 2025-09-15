@@ -54,23 +54,23 @@ pub struct NonConsumable {
     hourly_rate: Option<u16>,
 }
 
-impl Into<NonConsumable> for Consumable {
-    fn into(self) -> NonConsumable {
-        NonConsumable {
-            name: self.name,
-            quantity: self.quantity,
-            cost_per_unit: self.cost_per_unit,
-            hourly_rate: None,
+impl From<NonConsumable> for Consumable {
+    fn from(value: NonConsumable) -> Self {
+        Consumable {
+            name: value.name,
+            quantity: value.quantity,
+            cost_per_unit: value.quantity,
         }
     }
 }
 
-impl Into<Consumable> for NonConsumable {
-    fn into(self) -> Consumable {
-        Consumable {
-            name: self.name,
-            quantity: self.quantity,
-            cost_per_unit: self.quantity,
+impl From<Consumable> for NonConsumable {
+    fn from(value: Consumable) -> Self {
+        NonConsumable {
+            name: value.name,
+            quantity: value.quantity,
+            cost_per_unit: value.cost_per_unit,
+            hourly_rate: None,
         }
     }
 }
