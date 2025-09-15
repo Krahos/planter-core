@@ -54,6 +54,27 @@ pub struct NonConsumable {
     hourly_rate: Option<u16>,
 }
 
+impl From<NonConsumable> for Consumable {
+    fn from(value: NonConsumable) -> Self {
+        Consumable {
+            name: value.name,
+            quantity: value.quantity,
+            cost_per_unit: value.quantity,
+        }
+    }
+}
+
+impl From<Consumable> for NonConsumable {
+    fn from(value: Consumable) -> Self {
+        NonConsumable {
+            name: value.name,
+            quantity: value.quantity,
+            cost_per_unit: value.cost_per_unit,
+            hourly_rate: None,
+        }
+    }
+}
+
 impl Material {
     /// Returns a consumable material by default, with the given name.
     pub fn new(name: impl Into<String>) -> Self {
