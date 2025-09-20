@@ -20,7 +20,6 @@
         devShells.default = mkShell {
           buildInputs = [
             bacon
-            cargo-udeps
             cargo-edit
             rust-analyzer
             cargo-deny
