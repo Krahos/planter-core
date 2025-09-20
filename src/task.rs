@@ -1,4 +1,5 @@
 use crate::{duration::PositiveDuration, resources::Resource};
+use anyhow::Context;
 use chrono::{DateTime, Utc};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -61,9 +62,10 @@ impl Task {
     ///
     /// * `start` - The new start time of the task.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if start and end times are too far apart see [`duration`] for details.
+    /// Returns an error if the task has a finish date and the start date passed
+    /// as parameter is too far from that.
     ///
     /// # Example
     ///
@@ -77,7 +79,7 @@ impl Task {
     /// assert_eq!(task.start().unwrap(), start_time);
     /// ```
     #[allow(clippy::expect_used)]
-    pub fn edit_start(&mut self, start: DateTime<Utc>) {
+    pub fn edit_start(&mut self, start: DateTime<Utc>) -> anyhow::Result<()> {
         self.start = Some(start);
 
         if let Some(duration) = self.duration {
@@ -93,10 +95,11 @@ impl Task {
                 self.duration = Some(
                     duration
                         .try_into()
-                        .expect("Start time and end time were too far apart"),
+                        .context("Start time and finish time were too far apart")?,
                 );
             }
         }
+        Ok(())
     }
 
     /// Returns the start time of the task. It's None by default.
@@ -126,9 +129,11 @@ impl Task {
     ///
     /// * `finish` - The new finish time of the task.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if start and end times are too far apart see [`duration`] for details.
+    /// Returns an error if the task has a start date and the finish date passed
+    /// as parameter is too far from that.
+    ///
     ///
     /// # Example
     ///
@@ -140,11 +145,11 @@ impl Task {
     /// assert!(task.start().is_none());
     ///
     /// let mut finish_time = Utc::now();
-    /// task.edit_finish(finish_time);
+    /// task.edit_finish(finish_time).unwrap();
     /// assert_eq!(task.finish().unwrap(), finish_time);
     /// ```
     #[allow(clippy::expect_used)]
-    pub fn edit_finish(&mut self, finish: DateTime<Utc>) {
+    pub fn edit_finish(&mut self, finish: DateTime<Utc>) -> anyhow::Result<()> {
         self.finish = Some(finish);
 
         if let Some(start) = self.start() {
@@ -158,9 +163,10 @@ impl Task {
             self.duration = Some(
                 duration
                     .try_into()
-                    .expect("Start time and end time were too far apart"),
+                    .context("Start time and finish time were too far apart")?,
             );
         }
+        Ok(())
     }
 
     /// Returns the finish time of the task. It's None by default.
@@ -399,8 +405,8 @@ mod tests {
             let finish = start + Duration::milliseconds(milliseconds);
             let mut task = Task::new("World domination");
 
-            task.edit_start(start);
-            task.edit_finish(finish);
+            task.edit_start(start).unwrap();
+            task.edit_finish(finish).unwrap();
 
             assert!(task.duration().unwrap() == Duration::milliseconds(milliseconds).try_into().unwrap());
         }
@@ -420,7 +426,7 @@ mod tests {
             let start = Utc::now();
             let mut task = Task::new("World domination");
 
-            task.edit_start(start);
+            task.edit_start(start).unwrap();
             let duration = Duration::milliseconds(milliseconds).try_into().unwrap();
             task.edit_duration(duration);
             assert!(task.finish().unwrap() == start + *duration);
@@ -432,24 +438,49 @@ mod tests {
             let finish = start + Duration::milliseconds(milliseconds);
             let mut task = Task::new("World domination");
 
-            task.edit_start(start);
-            task.edit_finish(finish);
+            task.edit_start(start).unwrap();
+            task.edit_finish(finish).unwrap();
 
             let duration = Duration::milliseconds(milliseconds + 1).try_into().unwrap();
             task.edit_duration(duration);
             assert!(task.finish().unwrap() == start + *duration);
         }
 
+
         #[test]
-        fn start_time_is_properly_pushed_back_when_adding_earlier_end_time(milliseconds in 0..MAX_DURATION) {
+        fn start_time_is_properly_pushed_back_when_adding_earlier_finish_time(milliseconds in 0..MAX_DURATION) {
             let start = Utc::now();
             let finish = start - Duration::milliseconds(milliseconds);
             let mut task = Task::new("World domination");
 
-            task.edit_start(start);
-            task.edit_finish(finish);
+            task.edit_start(start).unwrap();
+            task.edit_finish(finish).unwrap();
 
             assert!(task.start().unwrap() == task.finish().unwrap());
         }
+    }
+
+    #[test]
+    fn edit_start_returns_error_when_too_far_apart() {
+        let milliseconds = MAX_DURATION + 1;
+        let finish = Utc::now();
+        let start = finish - Duration::milliseconds(milliseconds);
+        let mut task = Task::new("World domination");
+
+        task.edit_finish(finish).unwrap();
+
+        assert!(task.edit_start(start).is_err());
+    }
+
+    #[test]
+    fn edit_finish_returns_error_when_too_far_apart() {
+        let milliseconds = MAX_DURATION + 1;
+        let start = Utc::now();
+        let finish = start + Duration::milliseconds(milliseconds);
+        let mut task = Task::new("World domination");
+
+        task.edit_start(start).unwrap();
+
+        assert!(task.edit_finish(finish).is_err());
     }
 }
