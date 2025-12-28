@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use anyhow::{Context, bail};
-use bon::{Builder, builder};
+use bon::Builder;
 use chrono::{DateTime, Utc};
 use daggy::{
     Dag,
@@ -57,12 +57,12 @@ pub struct SubtaskRelationship {
 pub enum TimeRelationship {
     /// The predecessor has to start for the successor to finish.
     StartToFinish,
-    /// The predecessor has to start for the successor to finish.
+    /// The predecessor has to finish for the successor to finish.
     FinishToFinish,
     #[default]
     /// The predecessor has to finish for the successor to start.
     FinishToStart,
-    /// The predecessor has to start for the successor to finish.
+    /// The predecessor has to start for the successor to start.
     StartToStart,
 }
 
@@ -270,6 +270,32 @@ impl Project {
         self.tasks
             .update_edge(predecessor_index.into(), successor_index.into(), kind)
             .context("Tried to add a relationship between non existing nodes")?;
+        match kind {
+            TimeRelationship::StartToFinish => {}
+            TimeRelationship::FinishToFinish => {}
+            TimeRelationship::FinishToStart => {
+                if self
+                    .tasks
+                    .node_weight(predecessor_index.into())
+                    .context("Internal erorr")?
+                    .finish()
+                    .is_some()
+                {
+                    let finish = self
+                        .tasks
+                        .node_weight(predecessor_index.into())
+                        .context("Internal error")?
+                        .finish()
+                        .context("Internal error")?;
+                    self.tasks
+                        .node_weight_mut(successor_index.into())
+                        .context("Internal erorr")?
+                        .edit_start(finish)
+                        .context("Internal error")?;
+                }
+            }
+            TimeRelationship::StartToStart => {}
+        }
         anyhow::Ok(())
     }
 
@@ -897,17 +923,30 @@ pub mod test_utils {
 
 #[cfg(test)]
 mod tests {
+    use chrono::{Duration, Utc};
     use proptest::prelude::*;
-    use rand::{Rng, rng};
+    use rand::{rng, seq::IteratorRandom};
 
     use crate::{
         person::Person,
         project::{
-            Project, ResourceConversionError,
+            Project, ResourceConversionError, TimeRelationship,
             test_utils::{project_graph_strategy, project_strategy},
         },
         resources::{Consumable, Material, NonConsumable, Resource},
     };
+
+    fn rng_task_indices(max: usize, n: usize) -> Vec<usize> {
+        let mut rng = rng();
+        let indices: Vec<usize> = (0..max)
+            .choose_multiple(&mut rng, n)
+            .iter()
+            .cloned()
+            .collect();
+
+        indices
+    }
+
     proptest! {
         #[test]
         fn update_predecessors_rejects_circular_graphs(mut project in project_graph_strategy()) {
@@ -935,111 +974,87 @@ mod tests {
 
         #[test]
         fn update_predecessors_removes_them_if_input_is_empty(mut project in project_strategy()) {
-            let mut rng = rng();
-            let task_index1 = rng.random_range(0..project.tasks().count());
-            let mut task_index2 = task_index1;
+            let indices = rng_task_indices(project.tasks().count(), 2);
 
-            while task_index2 == task_index1 {
-                task_index2 = rng.random_range(0..project.tasks().count());
-            }
+            project.update_predecessors(indices[0], &[indices[1]]).unwrap();
+            project.update_predecessors(indices[1], &[]).unwrap();
 
-            project.update_predecessors(task_index1, &[task_index2]).unwrap();
-            project.update_predecessors(task_index1, &[]).unwrap();
-
-            assert_eq!(project.predecessors(task_index1).count(), 0);
+            assert_eq!(project.predecessors(indices[1]).count(), 0);
         }
 
         #[test]
         fn update_predecessors_removes_indices_not_present_in_input(mut project in project_strategy()) {
-            let mut rng = rng();
-            let task_index1 = rng.random_range(0..project.tasks().count());
-            let mut task_index2 = task_index1;
-            let mut task_index3 = task_index1;
+            let indices = rng_task_indices(project.tasks().count(), 3);
 
-            while task_index2 == task_index1 {
-                task_index2 = rng.random_range(0..project.tasks().count());
-            }
-            while task_index3 == task_index1 || task_index3 == task_index2 {
-                task_index3 = rng.random_range(0..project.tasks().count());
-            }
+            project.update_predecessors(indices[0], &[indices[1], indices[2]]).unwrap();
+            project.update_predecessors(indices[0], &[indices[1]]).unwrap();
 
-            project.update_predecessors(task_index1, &[task_index2, task_index3]).unwrap();
-            project.update_predecessors(task_index1, &[task_index2]).unwrap();
-
-            let mut predecessors = project.predecessors(task_index1);
-            assert_eq!(predecessors.next(), project.task(task_index2));
+            let mut predecessors = project.predecessors(indices[0]);
+            assert_eq!(predecessors.next(), project.task(indices[1]));
             assert!(predecessors.next().is_none());
         }
 
         #[test]
         fn update_predecessors_works(mut project in project_strategy()) {
-            let mut rng = rng();
-            let task_index1 = rng.random_range(0..project.tasks().count());
-            let mut task_index2 = task_index1;
+            let indices = rng_task_indices(project.tasks().count(), 2);
 
-            while task_index2 == task_index1 {
-                task_index2 = rng.random_range(0..project.tasks().count());
-            }
+            project.update_predecessors(indices[0], &[indices[1]]).unwrap();
 
-            project.update_predecessors(task_index1, &[task_index2]).unwrap();
-
-            let mut predecessors = project.predecessors(task_index1);
-            assert_eq!(project.predecessors(task_index1).count(), 1);
-            assert_eq!(predecessors.next(), project.task(task_index2));
+            let mut predecessors = project.predecessors(indices[0]);
+            assert_eq!(project.predecessors(indices[0]).count(), 1);
+            assert_eq!(predecessors.next(), project.task(indices[1]));
         }
 
         #[test]
         fn update_successors_works(mut project in project_strategy()) {
-            let mut rng = rng();
-            let task_index1 = rng.random_range(0..project.tasks().count());
-            let mut task_index2 = task_index1;
+            let indices = rng_task_indices(project.tasks().count(), 2);
 
-            while task_index2 == task_index1 {
-                task_index2 = rng.random_range(0..project.tasks().count());
-            }
+            project.update_successors(indices[0], &[indices[1]]).unwrap();
 
-            project.update_successors(task_index1, &[task_index2]).unwrap();
-
-            let mut successors = project.successors(task_index1);
-            assert_eq!(successors.next(), project.task(task_index2));
+            let mut successors = project.successors(indices[0]);
+            assert_eq!(successors.next(), project.task(indices[1]));
             assert!(successors.next().is_none());
         }
 
         #[test]
+        fn adding_finish_to_start_properly_pushes_successor(mut project in project_strategy()) {
+            let indices = rng_task_indices(project.tasks().count(), 2);
+
+            let now = Utc::now();
+            let earlier = Utc::now() - Duration::hours(2);
+
+            project.task_mut(indices[0]).unwrap().edit_finish(now).unwrap();
+
+            project.task_mut(indices[1]).unwrap().edit_start(earlier).unwrap();
+
+            project
+                .add_time_relationship(indices[0], indices[1], TimeRelationship::FinishToStart)
+                .unwrap();
+
+            // Successor's start time should now be pushed forward.
+            assert_eq!(project.task(indices[1]).unwrap().start(), Some(now));
+            assert_eq!(project.task(indices[0]).unwrap().finish(), project.task(indices[1]).unwrap().start());
+        }
+
+        #[test]
         fn update_successors_removes_them_if_input_is_empty(mut project in project_strategy()) {
-            let mut rng = rng();
-            let task_index1 = rng.random_range(0..project.tasks().count());
-            let mut task_index2 = task_index1;
+            let indices = rng_task_indices(project.tasks().count(), 2);
 
-            while task_index2 == task_index1 {
-                task_index2 = rng.random_range(0..project.tasks().count());
-            }
+            project.update_successors(indices[0], &[indices[1]]).unwrap();
+            project.update_successors(indices[0], &[]).unwrap();
 
-            project.update_successors(task_index1, &[task_index2]).unwrap();
-            project.update_successors(task_index1, &[]).unwrap();
-
-            assert_eq!(project.successors(task_index1).count(), 0);
+            assert_eq!(project.successors(indices[0]).count(), 0);
         }
 
         #[test]
         fn update_successors_removes_indices_not_present_in_input(mut project in project_strategy()) {
-            let mut rng = rng();
-            let task_index1 = rng.random_range(0..project.tasks().count());
-            let mut task_index2 = task_index1;
-            let mut task_index3 = task_index1;
+            let indices = rng_task_indices(project.tasks().count(), 3);
 
-            while task_index2 == task_index1 {
-                task_index2 = rng.random_range(0..project.tasks().count());
-            }
-            while task_index3 == task_index1 || task_index3 == task_index2 {
-                task_index3 = rng.random_range(0..project.tasks().count());
-            }
+            project.update_successors(indices[0], &[indices[1], indices[2]]).unwrap();
+            project.update_successors(indices[0], &[indices[1]]).unwrap();
 
-            project.update_successors(task_index1, &[task_index2, task_index3]).unwrap();
-            project.update_successors(task_index1, &[task_index2]).unwrap();
-
-            let mut successors = project.successors(task_index1);
-            assert_eq!(successors.next(), project.task(task_index2));
+            let mut successors = project.successors(indices[0]);
+            assert_eq!(successors.next(), project.task(indices[1]));
             assert!(successors.next().is_none());
         }
     }
