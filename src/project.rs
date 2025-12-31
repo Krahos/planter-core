@@ -1,15 +1,11 @@
+use daggy::petgraph::visit::IntoNeighborsDirected;
+use daggy::petgraph::visit::IntoNodeIdentifiers;
 use std::collections::HashSet;
 
 use anyhow::{Context, bail};
 use bon::Builder;
 use chrono::{DateTime, Utc};
-use daggy::{
-    Dag,
-    petgraph::{
-        Direction,
-        visit::{IntoNeighborsDirected, IntoNodeIdentifiers},
-    },
-};
+use daggy::{Dag, petgraph::Direction};
 use thiserror::Error;
 
 use crate::{
@@ -274,24 +270,45 @@ impl Project {
             TimeRelationship::StartToFinish => {}
             TimeRelationship::FinishToFinish => {}
             TimeRelationship::FinishToStart => {
-                if self
+                let predecessor_finish = self
                     .tasks
                     .node_weight(predecessor_index.into())
                     .context("Internal erorr")?
-                    .finish()
-                    .is_some()
-                {
-                    let finish = self
-                        .tasks
-                        .node_weight(predecessor_index.into())
-                        .context("Internal error")?
-                        .finish()
-                        .context("Internal error")?;
-                    self.tasks
-                        .node_weight_mut(successor_index.into())
-                        .context("Internal erorr")?
-                        .edit_start(finish)
-                        .context("Internal error")?;
+                    .finish();
+                let successor_start = self
+                    .tasks
+                    .node_weight(successor_index.into())
+                    .context("Internal erorr")?
+                    .start();
+
+                match (predecessor_finish, successor_start) {
+                    // Update predecessor finish.
+                    (None, Some(successor_start)) => {
+                        self.tasks
+                            .node_weight_mut(predecessor_index.into())
+                            .context("Internal erorr")?
+                            .edit_finish(successor_start)
+                            .context("Internal error")?;
+                    }
+                    // Update successor start.
+                    (Some(predecessor_finish), None) => {
+                        self.tasks
+                            .node_weight_mut(successor_index.into())
+                            .context("Internal erorr")?
+                            .edit_start(predecessor_finish)
+                            .context("Internal error")?;
+                    }
+                    // Only update successor start if earlier than predecessor finish.
+                    (Some(predecessor_finish), Some(successor_start))
+                        if predecessor_finish > successor_start =>
+                    {
+                        self.tasks
+                            .node_weight_mut(successor_index.into())
+                            .context("Internal erorr")?
+                            .edit_start(predecessor_finish)
+                            .context("Internal error")?;
+                    }
+                    _ => {}
                 }
             }
             TimeRelationship::StartToStart => {}
@@ -1034,6 +1051,43 @@ mod tests {
             // Successor's start time should now be pushed forward.
             assert_eq!(project.task(indices[1]).unwrap().start(), Some(now));
             assert_eq!(project.task(indices[0]).unwrap().finish(), project.task(indices[1]).unwrap().start());
+        }
+
+        #[test]
+        fn adding_finish_to_start_doesnt_push_later_start(mut project in project_strategy()) {
+            let indices = rng_task_indices(project.tasks().count(), 2);
+
+            let now = Utc::now();
+            let later = Utc::now() + Duration::hours(2);
+
+            project.task_mut(indices[0]).unwrap().edit_finish(now).unwrap();
+
+            project.task_mut(indices[1]).unwrap().edit_start(later).unwrap();
+
+            project
+                .add_time_relationship(indices[0], indices[1], TimeRelationship::FinishToStart)
+                .unwrap();
+
+            // Successor's start time should now stay the same.
+            assert_eq!(project.task(indices[1]).unwrap().start(), Some(later));
+        }
+
+        #[test]
+        fn adding_finish_to_start_fills_empty_finish(mut project in project_strategy()) {
+            let indices = rng_task_indices(project.tasks().count(), 2);
+
+            let now = Utc::now();
+
+            project.task_mut(indices[1]).unwrap().edit_start(now).unwrap();
+
+            project
+                .add_time_relationship(indices[0], indices[1], TimeRelationship::FinishToStart)
+                .unwrap();
+
+            // Predecessor's finish time should now be updated.
+            assert_eq!(project.task(indices[0]).unwrap().finish(), Some(now));
+            assert_eq!(project.task(indices[0]).unwrap().finish(), project.task(indices[1]).unwrap().start());
+
         }
 
         #[test]
