@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use anyhow::{Context, bail};
-use bon::{Builder, builder};
+use bon::Builder;
 use chrono::{DateTime, Utc};
 use daggy::{
     Dag,
