@@ -1,3 +1,18 @@
+#![cfg_attr(not(test), warn(
+    clippy::unwrap_in_result,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::panic_in_result_fn,
+    clippy::float_cmp,
+    clippy::float_cmp_const,
+    clippy::missing_panics_doc,
+    clippy::missing_errors_doc,
+    clippy::todo,
+    clippy::cast_lossless,
+    clippy::cognitive_complexity,
+    clippy::missing_const_for_fn,
+))]
 //! This is a library with types and behaviour inspired by the PMBOK Guide 7th edition.
 
 /// A duration is a unit of time that represents the amount of time required to complete a task.
@@ -22,3 +37,5 @@ pub mod resources;
 pub mod stakeholders;
 /// A task is a unit of work that needs to be completed in order to achieve the project's objectives. Tasks have a duration, a start date, an end date, and a status.
 pub mod task;
+
+pub use uuid::Uuid;

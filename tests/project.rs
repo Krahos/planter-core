@@ -16,7 +16,6 @@ use planter_core::{
 /// mutable and the user can add/remove tasks, resources, stakeholders, and
 /// other relevant information.
 fn test_project() -> anyhow::Result<()> {
-    // Initialize a project with a name, description, and start date.
     let start_date = Utc::now();
     let mut project = Project::builder()
         .name("World domination")
@@ -24,61 +23,70 @@ fn test_project() -> anyhow::Result<()> {
         .start_date(start_date)
         .build();
 
-    // Add tasks to the project.
-    project.add_task(Task::new("Find a crowbar"));
-    project.add_task(Task::new("Find a stimpack"));
-    project.add_task(Task::new("Open a proprietary software house"));
-    project.add_task(Task::new("Prey on free software projects"));
-    project.add_task(Task::new("Profit"));
+    let crowbar_id = project.add_task(Task::new("Find a crowbar"));
+    let stimpack_id = project.add_task(Task::new("Find a stimpack"));
+    let software_id = project.add_task(Task::new("Open a proprietary software house"));
+    let prey_id = project.add_task(Task::new("Prey on free software projects"));
+    let profit_id = project.add_task(Task::new("Profit"));
     assert_eq!(project.tasks().count(), 5);
 
-    // Add subtask relatonships to the project.
-    project.add_subtask(1, 2);
-    project.add_subtask(1, 3);
-
-    assert_eq!(project.subtasks(1).len(), 2);
-
-    // Add time relationships between tasks of the project.
     project
-        .add_time_relationship(0, 1, TimeRelationship::StartToFinish)
+        .add_subtask(stimpack_id, software_id)
+        .context("Failed to add subtask")?;
+    project
+        .add_subtask(stimpack_id, prey_id)
+        .context("Failed to add subtask")?;
+
+    assert_eq!(project.subtasks(stimpack_id).count(), 2);
+
+    project
+        .add_time_relationship(crowbar_id, stimpack_id, TimeRelationship::StartToFinish)
         .context("Tasks don't exist or circular dependencies detected")?;
 
     project
-        .add_time_relationship(0, 4, TimeRelationship::StartToFinish)
+        .add_time_relationship(crowbar_id, profit_id, TimeRelationship::StartToFinish)
         .context("Tasks don't exist or circular dependencies detected")?;
 
-    // Add a consumable material to the project
-    project.add_resource(Resource::Material(Material::Consumable(Consumable::new(
-        "Crowbar",
-    ))));
+    let mut crowbar_mat = Material::Consumable(Consumable::new("Crowbar"));
+    crowbar_mat.update_quantity(5);
+    crowbar_mat.update_cost_per_unit(150);
+    project.add_resource(Resource::Material(crowbar_mat));
 
-    // Convert the consumable material into a non consumable
     project
         .res_into_nonconsumable(0)
         .context("Failed to convert consumable into non consumable")?;
+    if let Resource::Material(ref m) = project.resources()[0] {
+        assert_eq!(m.name(), "Crowbar");
+        assert_eq!(m.quantity(), Some(5));
+        assert_eq!(m.cost_per_unit(), Some(150));
+    } else {
+        panic!("Expected Material after conversion");
+    }
 
-    // Add a consumable material to the project
     project.add_resource(Resource::Material(Material::NonConsumable(
         NonConsumable::new("Stimpack"),
     )));
 
-    // Convert the non consumable material into a consumable
     project
         .res_into_consumable(0)
         .context("Failed to convert non consumable into consumable")?;
+    if let Resource::Material(ref m) = project.resources()[0] {
+        assert_eq!(m.name(), "Crowbar");
+        assert_eq!(m.quantity(), Some(5));
+        assert_eq!(m.cost_per_unit(), Some(150));
+    } else {
+        panic!("Expected Material after conversion");
+    }
 
-    // Add a personnel resource to the project
     project.add_resource(Resource::Personnel {
         person: Person::new("Sebastiano", "Giordano").context("Failed to parse a name.")?,
         hourly_rate: None,
     });
     assert_eq!(project.resources().len(), 3);
 
-    // Remove a resource from the project
-    project.rm_resource(1);
+    let _ = project.rm_resource(1);
     assert_eq!(project.resources().len(), 2);
 
-    // Add stakeholders to the project
     let person = Person::new("Margherita", "Hack").context("Failed to parse a name")?;
     project.add_stakeholder(Stakeholder::Individual {
         person,

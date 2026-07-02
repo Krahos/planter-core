@@ -3,6 +3,8 @@ pub use email_address::EmailAddress;
 use nutype::nutype;
 pub use phonenumber::PhoneNumber;
 
+const NAME_LEN: usize = 50;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// Represents a person with a name and contact information.
 pub struct Person {
@@ -24,13 +26,17 @@ pub struct Person {
 pub struct NameString(String);
 
 impl Person {
-    /// Create a new `Person` with the given name.
+    /// Create a new `Person` with the given name and surname.
     ///
     /// # Arguments
-    /// * `name` - The name of the person.
+    /// * `name` - The first name of the person.
+    /// * `surname` - The surname of the person.
     ///
     /// # Returns
     /// A new `Person` instance.
+    ///
+    /// # Errors
+    /// Returns an error if the name or surname is empty or exceeds the maximum length.
     ///
     /// # Examples
     /// ```
@@ -38,13 +44,11 @@ impl Person {
     ///
     /// let person = Person::new("Margherita", "Hack").unwrap();
     /// ```
-    pub fn new(name: impl Into<String>, surname: impl Into<String>) -> Option<Self> {
-        let (name, surname) = match (NameString::try_new(name), NameString::try_new(surname)) {
-            (Ok(n), Ok(s)) => (n, s),
-            _ => return None,
-        };
+    pub fn new(name: impl Into<String>, surname: impl Into<String>) -> anyhow::Result<Self> {
+        let name = NameString::try_new(name).context("Invalid first name")?;
+        let surname = NameString::try_new(surname).context("Invalid last name")?;
 
-        Some(Person {
+        Ok(Person {
             first_name: name,
             last_name: surname,
             email: None,
@@ -66,7 +70,7 @@ impl Person {
     /// let mut person = Person::new("Margherita", "Hack").unwrap();
     /// let email = EmailAddress::from_str("margherita.hack@example.com").unwrap();
     /// person.update_email(email.clone());
-    /// assert_eq!(person.email(), &Some(email));
+    /// assert_eq!(person.email(), Some(&email));
     /// ```
     pub fn update_email(&mut self, email: EmailAddress) {
         self.email = Some(email);
@@ -83,7 +87,7 @@ impl Person {
     /// let mut person = Person::new("Margherita", "Hack").unwrap();
     /// let email = EmailAddress::from_str("margherita.hack@example.com").unwrap();
     /// person.update_email(email.clone());
-    /// assert_eq!(person.email(), &Some(email));
+    /// assert_eq!(person.email(), Some(&email));
     /// person.rm_email();
     /// assert!(person.email().is_none());
     /// ```
@@ -105,7 +109,7 @@ impl Person {
     /// let mut person = Person::new("Margherita", "Hack").unwrap();
     /// let phone = PhoneNumber::from_str("+1234567890").unwrap();
     /// person.update_phone(phone.clone());
-    /// assert_eq!(person.phone(), &Some(phone));
+    /// assert_eq!(person.phone(), Some(&phone));
     /// ```
     pub fn update_phone(&mut self, phone: PhoneNumber) {
         self.phone = Some(phone);
@@ -122,7 +126,7 @@ impl Person {
     /// let mut person = Person::new("Margherita", "Hack").unwrap();
     /// let phone = PhoneNumber::from_str("+1234567890").unwrap();
     /// person.update_phone(phone.clone());
-    /// assert_eq!(person.phone(), &Some(phone));
+    /// assert_eq!(person.phone(), Some(&phone));
     /// person.rm_phone();
     /// assert!(person.phone().is_none());
     /// ```
@@ -141,10 +145,11 @@ impl Person {
     /// let mut person = Person::new("Margherita", "Hack").unwrap();
     /// let phone = PhoneNumber::from_str("+1234567890").unwrap();
     /// person.update_phone(phone.clone());
-    /// assert_eq!(person.phone(), &Some(phone));
+    /// assert_eq!(person.phone(), Some(&phone));
     /// ```
-    pub fn phone(&self) -> &Option<PhoneNumber> {
-        &self.phone
+    #[must_use]
+    pub const fn phone(&self) -> Option<&PhoneNumber> {
+        self.phone.as_ref()
     }
 
     /// Get the email of the person.
@@ -158,10 +163,11 @@ impl Person {
     /// let mut person = Person::new("Margherita", "Hack").unwrap();
     /// let email = EmailAddress::from_str("margherita.hack@example.com").unwrap();
     /// person.update_email(email.clone());
-    /// assert_eq!(person.email(), &Some(email));
+    /// assert_eq!(person.email(), Some(&email));
     /// ```
-    pub fn email(&self) -> &Option<EmailAddress> {
-        &self.email
+    #[must_use]
+    pub const fn email(&self) -> Option<&EmailAddress> {
+        self.email.as_ref()
     }
 
     /// Get the name of the person.
@@ -173,6 +179,7 @@ impl Person {
     /// let mut person = Person::new("Margherita", "Hack").unwrap();
     /// assert_eq!(person.full_name(), "Margherita Hack");
     /// ```
+    #[must_use]
     pub fn full_name(&self) -> String {
         format!("{} {}", self.first_name, self.last_name)
     }
@@ -186,6 +193,7 @@ impl Person {
     /// let person = Person::new("Margherita", "Hack").unwrap();
     /// assert_eq!(person.first_name(), "Margherita");
     /// ```
+    #[must_use]
     pub fn first_name(&self) -> &str {
         &self.first_name
     }
@@ -221,6 +229,7 @@ impl Person {
     /// let mut person = Person::new("Margherita", "Hack").unwrap();
     /// assert_eq!(person.last_name(), "Hack");
     /// ```
+    #[must_use]
     pub fn last_name(&self) -> &str {
         &self.last_name
     }
@@ -248,8 +257,6 @@ impl Person {
     }
 }
 
-const NAME_LEN: usize = 50;
-
 #[cfg(test)]
 /// Test utilities for the `person` module.
 pub mod test_utils {
@@ -261,11 +268,88 @@ pub mod test_utils {
 
     /// Generate a random email address.
     pub fn email() -> impl Strategy<Value = EmailAddress> {
-        r"^\+?[1-9][0-9]{7,14}$".prop_map(|s: String| EmailAddress::from_str(&s).unwrap())
+        r"[a-z]{1,10}@[a-z]{1,10}\.[a-z]{2,4}"
+            .prop_map(|s: String| EmailAddress::from_str(&s).unwrap())
     }
 
     /// Generate a random phone number.
     pub fn phone_number() -> impl Strategy<Value = PhoneNumber> {
-        r"^\d{3}-\d{3}-\d{4}$".prop_map(|s: String| PhoneNumber::from_str(&s).unwrap())
+        r"\+39[0-9]{6,12}".prop_map(|s: String| PhoneNumber::from_str(&s).unwrap())
+    }
+
+    /// Generate a random valid name string (1-50 alpha chars).
+    pub fn valid_name() -> impl Strategy<Value = String> {
+        "[a-zA-Z]{1,50}"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use proptest::prelude::*;
+
+    use super::test_utils::{email, phone_number, valid_name};
+    use crate::person::Person;
+
+    proptest! {
+        #[test]
+        fn full_name_equals_first_last(first in valid_name(), last in valid_name()) {
+            let person = Person::new(&first, &last).unwrap();
+            assert_eq!(person.full_name(), format!("{} {}", first, last));
+        }
+
+        #[test]
+        fn update_first_name_roundtrip(first in valid_name(), last in valid_name(), new_first in valid_name()) {
+            let mut person = Person::new(&first, &last).unwrap();
+            person.update_first_name(&new_first).unwrap();
+            assert_eq!(person.first_name(), new_first);
+        }
+
+        #[test]
+        fn update_last_name_roundtrip(first in valid_name(), last in valid_name(), new_last in valid_name()) {
+            let mut person = Person::new(&first, &last).unwrap();
+            person.update_last_name(&new_last).unwrap();
+            assert_eq!(person.last_name(), new_last);
+        }
+
+        #[test]
+        fn update_email_roundtrip(first in valid_name(), last in valid_name(), email in email()) {
+            let mut person = Person::new(&first, &last).unwrap();
+            person.update_email(email.clone());
+            assert_eq!(person.email(), Some(&email));
+            person.rm_email();
+            assert!(person.email().is_none());
+        }
+
+        #[test]
+        fn update_phone_roundtrip(first in valid_name(), last in valid_name(), phone in phone_number()) {
+            let mut person = Person::new(&first, &last).unwrap();
+            person.update_phone(phone.clone());
+            assert_eq!(person.phone(), Some(&phone));
+            person.rm_phone();
+            assert!(person.phone().is_none());
+        }
+
+        #[test]
+        fn new_rejects_empty_name(name in valid_name()) {
+            assert!(Person::new("", &name).is_err());
+            assert!(Person::new(&name, "").is_err());
+        }
+
+        #[test]
+        fn new_rejects_long_name(first in "[a-zA-Z]{51,100}", last in valid_name()) {
+            assert!(Person::new(&first, &last).is_err());
+        }
+
+        #[test]
+        fn update_first_name_rejects_invalid(name in valid_name(), bad in "[a-zA-Z]{51,100}") {
+            let mut person = Person::new("valid", &name).unwrap();
+            assert!(person.update_first_name(&bad).is_err());
+        }
+
+        #[test]
+        fn update_last_name_rejects_invalid(name in valid_name(), bad in "[a-zA-Z]{51,100}") {
+            let mut person = Person::new(&name, "valid").unwrap();
+            assert!(person.update_last_name(&bad).is_err());
+        }
     }
 }
