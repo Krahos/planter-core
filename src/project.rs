@@ -672,12 +672,13 @@ impl Project {
         }
         // Remove from any existing parent first.
         if let Some(old_parent) = self.parent_of.remove(&child_id)
-            && let Some(children) = self.children.get_mut(&old_parent) {
-                children.retain(|c| *c != child_id);
-                if children.is_empty() {
-                    self.children.remove(&old_parent);
-                }
+            && let Some(children) = self.children.get_mut(&old_parent)
+        {
+            children.retain(|c| *c != child_id);
+            if children.is_empty() {
+                self.children.remove(&old_parent);
             }
+        }
         self.children.entry(parent_id).or_default().push(child_id);
         self.parent_of.insert(child_id, parent_id);
         Ok(())
@@ -795,17 +796,17 @@ impl Project {
             return Ok(());
         }
 
-        let parent = self
-            .task_mut(parent_id)
-            .context("Parent task not found")?;
+        let parent = self.task_mut(parent_id).context("Parent task not found")?;
         if let Some(start) = earliest_start
-            && parent.start().is_none_or(|ps| start < ps) {
-                let _ = parent.edit_start(start);
-            }
+            && parent.start().is_none_or(|ps| start < ps)
+        {
+            let _ = parent.edit_start(start);
+        }
         if let Some(finish) = latest_finish
-            && parent.finish().is_none_or(|pf| finish > pf) {
-                let _ = parent.edit_finish(finish);
-            }
+            && parent.finish().is_none_or(|pf| finish > pf)
+        {
+            let _ = parent.edit_finish(finish);
+        }
         Ok(())
     }
 
