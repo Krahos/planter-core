@@ -1,13 +1,15 @@
+use std::fmt;
 use std::ops::Deref;
+use std::str::FromStr;
 
 use chrono::Duration;
-use once_cell::sync::Lazy;
-use regex::bytes::Regex;
+use regex::Regex;
+use std::sync::LazyLock;
 use thiserror::Error;
 
 /// A duration is a unit of time that represents the amount of time required to complete a task.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct PositiveDuration(Duration);
+pub struct NonNegativeDuration(Duration);
 
 /// Represents an error that occurs when trying to parse a negative duration.
 #[derive(Error, Debug)]
@@ -15,86 +17,59 @@ pub enum DurationError {
     /// Used when the wanted duration would be negative.
     #[error("Negative values are not allowed for durations")]
     NegativeDuration,
-    /// Used when the wanted duration would exceed the maximum allowed value.
-    #[error("Duration would exceed maximum allowed value")]
-    ExceedsMaximumDuration,
     /// Used when trying to parse an invalid string.
-    #[error("Input string couldn't be parsed into a PositiveDuration")]
+    #[error("Input string couldn't be parsed into a NonNegativeDuration")]
     InvalidInput,
 }
 
-impl PositiveDuration {
-    /// Tries to parse a string and return the corresponding `[PositiveDuration]`
+#[allow(clippy::expect_used)]
+static DURATION_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^([0-9]+) h$").expect("hardcoded regex is valid"));
+
+impl NonNegativeDuration {
+    /// Tries to parse a string and return the corresponding `[NonNegativeDuration]`
     ///
     /// # Arguments
     /// * `s` - The string to parse. Currently, only hours are supported in the format "X h".
     ///
     /// # Returns
-    /// * `Ok(PositiveDuration)` - If the input string could be parsed into a `PositiveDuration`.
-    /// * `Err(DurationError)` - If the input string couldn't be parsed into a `PositiveDuration`.
+    /// * `Ok(NonNegativeDuration)` - If the input string could be parsed into a `NonNegativeDuration`.
+    /// * `Err(DurationError)` - If the input string couldn't be parsed into a `NonNegativeDuration`.
     ///
     /// # Errors
-    /// * `DurationError::InvalidInput` - If the input string couldn't be parsed into a `PositiveDuration`.
-    /// * `DurationError::ExceedsMaximumDuration` - If the parsed duration exceeds the maximum allowed value.
-    ///
-    /// # Panics
-    /// This function uses `expect`, but it should only panic in case of a bug.
+    /// * `DurationError::InvalidInput` - If the input string couldn't be parsed into a `NonNegativeDuration`.
     ///
     /// # Examples
     ///
     /// ```
-    /// use planter_core::duration::PositiveDuration;
+    /// use planter_core::duration::NonNegativeDuration;
     ///
-    /// let duration = PositiveDuration::parse_from_str("8 h").unwrap();
+    /// let duration = NonNegativeDuration::parse_from_str("8 h").unwrap();
     /// assert_eq!(duration.num_hours(), 8);
     /// ```
-    ///
-    /// ```should_panic
-    /// use planter_core::duration::PositiveDuration;
-    ///
-    /// /// Passing invalid input will result in an `[DurationError::InvalidInput]`
-    /// let duration = PositiveDuration::parse_from_str("random garbage").unwrap();
-    /// ```
-    #[allow(clippy::expect_used)]
-    #[allow(clippy::unwrap_in_result)]
     pub fn parse_from_str(s: &str) -> Result<Self, DurationError> {
-        let bytes = s.as_bytes();
-        static RE: Lazy<Regex> = Lazy::new(|| {
-            Regex::new(r"^[0-9]{1,12} h$")
-                .expect("It wasn't possible to compile a hardcoded regex. This is a bug.")
-        });
-        if RE.is_match(bytes) {
-            let hours = s.split(' ').next().expect("Expecting to retrieve the hours from the string after matching the regex. This is a bug.").parse::<i64>().expect("Expecting to convert the hours to an i64. This is a bug.");
-            if hours > MAX_DURATION {
-                Err(DurationError::ExceedsMaximumDuration)
-            } else {
-                Ok(PositiveDuration(Duration::hours(hours)))
-            }
+        if let Some(caps) = DURATION_RE.captures(s) {
+            let hours: i64 = caps[1].parse().map_err(|_| DurationError::InvalidInput)?;
+            Ok(NonNegativeDuration(Duration::hours(hours)))
         } else {
             Err(DurationError::InvalidInput)
         }
     }
 }
 
-/// Maximum duration allowed is ~31.68809 years.
-pub const MAX_DURATION: i64 = 999_999_999_999;
-
-impl TryFrom<Duration> for PositiveDuration {
+impl TryFrom<Duration> for NonNegativeDuration {
     type Error = DurationError;
 
-    /// Creates a new `PositiveDuration` from a `chrono::Duration`.
     fn try_from(value: Duration) -> Result<Self, Self::Error> {
         if value < Duration::milliseconds(0) {
             Err(DurationError::NegativeDuration)
-        } else if value > Duration::milliseconds(MAX_DURATION) {
-            Err(DurationError::ExceedsMaximumDuration)
         } else {
-            Ok(PositiveDuration(value))
+            Ok(NonNegativeDuration(value))
         }
     }
 }
 
-impl Deref for PositiveDuration {
+impl Deref for NonNegativeDuration {
     type Target = Duration;
 
     fn deref(&self) -> &Self::Target {
@@ -102,14 +77,28 @@ impl Deref for PositiveDuration {
     }
 }
 
+impl fmt::Display for NonNegativeDuration {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} h", self.num_hours())
+    }
+}
+
+impl FromStr for NonNegativeDuration {
+    type Err = DurationError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::parse_from_str(s)
+    }
+}
+
 #[cfg(test)]
-/// Utilities to run tests with duration.
+/// Utilities to test with duration.
 pub mod test_utils {
     use proptest::prelude::Strategy;
 
     /// Generate a random duration string.
     pub fn duration_string() -> impl Strategy<Value = String> {
-        r"[0-9]{1,12} h".prop_map(|s: String| s.to_owned())
+        r"[0-9]{1,12} h"
     }
 }
 
@@ -123,23 +112,14 @@ mod tests {
         #[test]
         fn parse_from_str_works(s in duration_string()) {
             let hours = s.split(' ').next().unwrap().parse::<i64>().unwrap();
-            if !(0..=MAX_DURATION).contains(&hours) {
-                assert!(PositiveDuration::parse_from_str(&s).is_err());
-            } else {
-                let duration = PositiveDuration::parse_from_str(&s).unwrap();
-                assert_eq!(duration.num_hours(), hours);
-            }
+            let duration = NonNegativeDuration::parse_from_str(&s).unwrap();
+            assert_eq!(duration.num_hours(), hours);
         }
 
         #[test]
         fn parse_from_str_fails_with_invalid_input(s in "\\PC*") {
-            let bytes = s.as_bytes();
-            static RE: Lazy<Regex> = Lazy::new(|| {
-                Regex::new(r"^[0-9]{1,12} h$")
-                    .expect("It wasn't possible to compile a hardcoded regex. This is a bug.")
-            });
-            if !RE.is_match(bytes) {
-                assert!(PositiveDuration::parse_from_str(&s).is_err())
+            if !DURATION_RE.is_match(&s) {
+                assert!(NonNegativeDuration::parse_from_str(&s).is_err())
             }
         }
     }
