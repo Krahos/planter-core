@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use anyhow::{bail, Context};
+use anyhow::{Context, bail};
 use bon::Builder;
 use chrono::{DateTime, Utc};
 use thiserror::Error;
@@ -314,9 +314,7 @@ impl Project {
     /// assert_eq!(project.tasks().count(), 1);
     /// ```
     pub fn tasks(&self) -> impl Iterator<Item = &Task> {
-        self.task_order
-            .iter()
-            .filter_map(|id| self.tasks.get(id))
+        self.task_order.iter().filter_map(|id| self.tasks.get(id))
     }
 
     /// Returns a mutable iterator over the tasks.
@@ -673,18 +671,14 @@ impl Project {
             current = ancestor;
         }
         // Remove from any existing parent first.
-        if let Some(old_parent) = self.parent_of.remove(&child_id) {
-            if let Some(children) = self.children.get_mut(&old_parent) {
+        if let Some(old_parent) = self.parent_of.remove(&child_id)
+            && let Some(children) = self.children.get_mut(&old_parent) {
                 children.retain(|c| *c != child_id);
                 if children.is_empty() {
                     self.children.remove(&old_parent);
                 }
             }
-        }
-        self.children
-            .entry(parent_id)
-            .or_default()
-            .push(child_id);
+        self.children.entry(parent_id).or_default().push(child_id);
         self.parent_of.insert(child_id, parent_id);
         Ok(())
     }
@@ -759,16 +753,16 @@ impl Project {
     /// assert_eq!(project.subtasks(parent).count(), 1);
     /// ```
     pub fn subtasks(&self, parent_id: Uuid) -> impl Iterator<Item = Uuid> + '_ {
-        self.children
-            .get(&parent_id)
-            .into_iter()
-            .flatten()
-            .copied()
+        self.children.get(&parent_id).into_iter().flatten().copied()
     }
 
     /// Expands the parent's start/finish dates to encompass all children.
     /// Only ever expands outward — never contracts.
     /// Has no effect if no child has start/finish dates.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the parent task doesn't exist.
     ///
     /// # Example
     ///
@@ -783,11 +777,11 @@ impl Project {
     ///
     /// let now = Utc::now();
     /// project.task_mut(supplies).unwrap().edit_start(now).unwrap();
-    /// project.sync_parent_dates(army);
+    /// project.sync_parent_dates(army).unwrap();
     ///
     /// assert_eq!(project.task(army).unwrap().start(), Some(now));
     /// ```
-    pub fn sync_parent_dates(&mut self, parent_id: Uuid) {
+    pub fn sync_parent_dates(&mut self, parent_id: Uuid) -> anyhow::Result<()> {
         let earliest_start = self
             .subtasks(parent_id)
             .filter_map(|child_id| self.task(child_id).and_then(|t| t.start()))
@@ -798,20 +792,21 @@ impl Project {
             .max();
 
         if earliest_start.is_none() && latest_finish.is_none() {
-            return;
+            return Ok(());
         }
 
-        let parent = self.task_mut(parent_id).unwrap();
-        if let Some(start) = earliest_start {
-            if parent.start().map_or(true, |ps| start < ps) {
+        let parent = self
+            .task_mut(parent_id)
+            .context("Parent task not found")?;
+        if let Some(start) = earliest_start
+            && parent.start().is_none_or(|ps| start < ps) {
                 let _ = parent.edit_start(start);
             }
-        }
-        if let Some(finish) = latest_finish {
-            if parent.finish().map_or(true, |pf| finish > pf) {
+        if let Some(finish) = latest_finish
+            && parent.finish().is_none_or(|pf| finish > pf) {
                 let _ = parent.edit_finish(finish);
             }
-        }
+        Ok(())
     }
 
     /// Returns the start date of the project.
@@ -1019,9 +1014,9 @@ impl Project {
             Resource::Material(Material::NonConsumable(nc)) if to_consumable => {
                 Some(Resource::Material(Material::Consumable(nc.clone().into())))
             }
-            Resource::Material(Material::Consumable(c)) if !to_consumable => {
-                Some(Resource::Material(Material::NonConsumable(c.clone().into())))
-            }
+            Resource::Material(Material::Consumable(c)) if !to_consumable => Some(
+                Resource::Material(Material::NonConsumable(c.clone().into())),
+            ),
             Resource::Material(Material::Consumable(_))
             | Resource::Material(Material::NonConsumable(_)) => None,
             _ => return Err(ResourceConversionError::ConversionNotPossible),
@@ -1205,7 +1200,12 @@ pub mod test_utils {
             for &current in &ids {
                 if let Some(prev) = previous {
                     project
-                        .update_relationships(prev, &[current], RelDir::Successors, TimeRelationship::FinishToStart)
+                        .update_relationships(
+                            prev,
+                            &[current],
+                            RelDir::Successors,
+                            TimeRelationship::FinishToStart,
+                        )
                         .unwrap();
                 }
                 previous = Some(current);
@@ -1229,7 +1229,7 @@ pub mod test_utils {
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;
-    use rand::{rng, RngExt};
+    use rand::{RngExt, rng};
 
     use chrono::Utc;
     use uuid::Uuid;
@@ -1415,11 +1415,20 @@ mod tests {
         let old_preds: Vec<Uuid> = project.predecessors_ids(c).collect();
         assert_eq!(old_preds, vec![b]);
 
-        let result = project.update_relationships(c, &[a, d], RelDir::Predecessors, TimeRelationship::FinishToStart);
+        let result = project.update_relationships(
+            c,
+            &[a, d],
+            RelDir::Predecessors,
+            TimeRelationship::FinishToStart,
+        );
         assert!(result.is_err());
 
         let preds: Vec<Uuid> = project.predecessors_ids(c).collect();
-        assert_eq!(preds, vec![b], "predecessors should be unchanged after rollback");
+        assert_eq!(
+            preds,
+            vec![b],
+            "predecessors should be unchanged after rollback"
+        );
         assert!(
             !project.predecessors_ids(c).any(|i| i == a),
             "partially-added edge a→c should have been rolled back"
@@ -1435,14 +1444,24 @@ mod tests {
         let d = project.add_task(Task::new("D"));
 
         project
-            .update_relationships(c, &[a, b], RelDir::Predecessors, TimeRelationship::FinishToStart)
+            .update_relationships(
+                c,
+                &[a, b],
+                RelDir::Predecessors,
+                TimeRelationship::FinishToStart,
+            )
             .unwrap();
         let preds: Vec<Uuid> = project.predecessors_ids(c).collect();
         assert!(preds.contains(&a), "should contain a, got {preds:?}");
         assert!(preds.contains(&b), "should contain b, got {preds:?}");
 
         project
-            .update_relationships(c, &[b, d], RelDir::Predecessors, TimeRelationship::FinishToStart)
+            .update_relationships(
+                c,
+                &[b, d],
+                RelDir::Predecessors,
+                TimeRelationship::FinishToStart,
+            )
             .unwrap();
         let preds: Vec<Uuid> = project.predecessors_ids(c).collect();
         assert!(preds.contains(&b));
@@ -1748,12 +1767,16 @@ mod tests {
         let mut project = Project::new("test");
         let task = project.add_task(Task::new("task"));
         let fake = Uuid::new_v4();
-        assert!(project
-            .add_time_relationship(fake, task, TimeRelationship::FinishToStart)
-            .is_err());
-        assert!(project
-            .add_time_relationship(task, fake, TimeRelationship::FinishToStart)
-            .is_err());
+        assert!(
+            project
+                .add_time_relationship(fake, task, TimeRelationship::FinishToStart)
+                .is_err()
+        );
+        assert!(
+            project
+                .add_time_relationship(task, fake, TimeRelationship::FinishToStart)
+                .is_err()
+        );
     }
 
     #[test]
@@ -1905,7 +1928,7 @@ mod tests {
             project.task_mut(ids[child1_idx]).unwrap().edit_start(child1_start).unwrap();
             project.task_mut(ids[child2_idx]).unwrap().edit_finish(child2_finish).unwrap();
 
-            project.sync_parent_dates(ids[parent_idx]);
+            project.sync_parent_dates(ids[parent_idx]).unwrap();
 
             assert_eq!(project.task(ids[parent_idx]).unwrap().start(), Some(child1_start));
             assert_eq!(project.task(ids[parent_idx]).unwrap().finish(), Some(child2_finish));
@@ -1922,7 +1945,7 @@ mod tests {
         let now = Utc::now();
         project.task_mut(army).unwrap().edit_start(now).unwrap();
 
-        project.sync_parent_dates(army);
+        project.sync_parent_dates(army).unwrap();
         assert_eq!(project.task(army).unwrap().start(), Some(now));
         assert!(project.task(army).unwrap().finish().is_none());
     }

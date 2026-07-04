@@ -550,7 +550,10 @@ mod tests {
         task.edit_start(start).unwrap();
 
         assert_eq!(task.finish(), Some(start));
-        assert_eq!(task.duration(), Some(Duration::milliseconds(0).try_into().unwrap()));
+        assert_eq!(
+            task.duration(),
+            Some(Duration::milliseconds(0).try_into().unwrap())
+        );
     }
 
     proptest! {

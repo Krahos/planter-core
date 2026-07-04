@@ -23,9 +23,8 @@ pub enum DurationError {
 }
 
 #[allow(clippy::expect_used)]
-static DURATION_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^([0-9]+) h$").expect("hardcoded regex is valid")
-});
+static DURATION_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^([0-9]+) h$").expect("hardcoded regex is valid"));
 
 impl NonNegativeDuration {
     /// Tries to parse a string and return the corresponding `[NonNegativeDuration]`
@@ -50,9 +49,7 @@ impl NonNegativeDuration {
     /// ```
     pub fn parse_from_str(s: &str) -> Result<Self, DurationError> {
         if let Some(caps) = DURATION_RE.captures(s) {
-            let hours: i64 = caps[1]
-                .parse()
-                .map_err(|_| DurationError::InvalidInput)?;
+            let hours: i64 = caps[1].parse().map_err(|_| DurationError::InvalidInput)?;
             Ok(NonNegativeDuration(Duration::hours(hours)))
         } else {
             Err(DurationError::InvalidInput)

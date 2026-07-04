@@ -124,7 +124,7 @@ fn test_project() -> anyhow::Result<()> {
 
     let now = Utc::now();
     project.task_mut(prey_id).unwrap().edit_start(now)?;
-    project.sync_parent_dates(stimpack_id);
+    project.sync_parent_dates(stimpack_id)?;
     assert_eq!(project.task(stimpack_id).unwrap().start(), Some(now));
 
     Ok(())

@@ -33,7 +33,10 @@ impl Stakeholder {
     /// ```
     #[must_use]
     pub const fn individual(person: Person, description: Option<String>) -> Self {
-        Stakeholder::Individual { person, description }
+        Stakeholder::Individual {
+            person,
+            description,
+        }
     }
 
     /// Creates a new organization stakeholder.
@@ -47,7 +50,10 @@ impl Stakeholder {
     /// ```
     #[must_use]
     pub fn organization(name: impl Into<String>, description: Option<String>) -> Self {
-        Stakeholder::Organization { name: name.into(), description }
+        Stakeholder::Organization {
+            name: name.into(),
+            description,
+        }
     }
 
     /// Returns the description of the stakeholder.
@@ -120,8 +126,8 @@ impl Stakeholder {
 mod tests {
     use proptest::prelude::*;
 
-    use crate::person::test_utils::valid_name;
     use crate::person::Person;
+    use crate::person::test_utils::valid_name;
     use crate::stakeholders::Stakeholder;
 
     fn description() -> impl Strategy<Value = Option<String>> {
