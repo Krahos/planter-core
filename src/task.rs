@@ -109,6 +109,8 @@ impl Task {
                     .try_into()
                     .context("Start and finish times were too far apart")?,
             );
+        } else if let Some(duration) = self.duration {
+            self.finish = Some(start + *duration);
         }
         Ok(())
     }
@@ -177,6 +179,8 @@ impl Task {
                     .try_into()
                     .context("Start time and finish time were too far apart")?,
             );
+        } else if let Some(duration) = self.duration {
+            self.start = Some(finish - *duration);
         }
         Ok(())
     }
@@ -223,6 +227,8 @@ impl Task {
         if let Some(start) = self.start() {
             let finish = start + *duration;
             self.finish = Some(finish);
+        } else if let Some(finish) = self.finish() {
+            self.start = Some(finish - *duration);
         }
     }
 
@@ -607,6 +613,36 @@ mod tests {
             assert!(removed.is_some());
             assert_eq!(task.resources().len(), 1);
             assert!(task.rm_resource(1).is_none());
+        }
+
+        #[test]
+        fn edit_start_with_duration_infers_finish(milliseconds in 0..MAX_TEST_MS) {
+            let start = Utc::now();
+            let duration = chrono::Duration::milliseconds(milliseconds).try_into().unwrap();
+            let mut task = Task::new("World domination");
+            task.edit_duration(duration);
+            task.edit_start(start).unwrap();
+            assert_eq!(task.finish(), Some(start + *duration));
+        }
+
+        #[test]
+        fn edit_finish_with_duration_infers_start(milliseconds in 0..MAX_TEST_MS) {
+            let finish = Utc::now();
+            let duration = chrono::Duration::milliseconds(milliseconds).try_into().unwrap();
+            let mut task = Task::new("World domination");
+            task.edit_duration(duration);
+            task.edit_finish(finish).unwrap();
+            assert_eq!(task.start(), Some(finish - *duration));
+        }
+
+        #[test]
+        fn edit_duration_with_finish_infers_start(milliseconds in 0..MAX_TEST_MS) {
+            let finish = Utc::now();
+            let duration = chrono::Duration::milliseconds(milliseconds).try_into().unwrap();
+            let mut task = Task::new("World domination");
+            task.edit_finish(finish).unwrap();
+            task.edit_duration(duration);
+            assert_eq!(task.start(), Some(finish - *duration));
         }
     }
 }

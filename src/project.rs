@@ -154,6 +154,68 @@ impl Project {
         id
     }
 
+    /// Inserts a new task as a sibling right before `sibling_id` in the task order.
+    /// If the sibling has a parent, the new task becomes a child of the same parent.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use planter_core::{project::Project, task::Task};
+    ///
+    /// let mut project = Project::new("World domination");
+    /// let a = project.add_task(Task::new("Build an army"));
+    /// let b = project.add_task(Task::new("Train troops"));
+    /// let c = project.add_sibling_before(Task::new("Gather allies"), b);
+    ///
+    /// let ids: Vec<_> = project.tasks().map(|t| t.id()).collect();
+    /// assert_eq!(ids, vec![a, c, b]);
+    /// ```
+    pub fn add_sibling_before(&mut self, task: Task, sibling_id: Uuid) -> Uuid {
+        let id = task.id();
+        self.tasks.insert(id, task);
+        if let Some(pos) = self.task_order.iter().position(|&t| t == sibling_id) {
+            self.task_order.insert(pos, id);
+        } else {
+            self.task_order.push(id);
+        }
+        if let Some(&parent_id) = self.parent_of.get(&sibling_id) {
+            self.parent_of.insert(id, parent_id);
+            self.children.entry(parent_id).or_default().push(id);
+        }
+        id
+    }
+
+    /// Inserts a new task as a sibling right after `sibling_id` in the task order.
+    /// If the sibling has a parent, the new task becomes a child of the same parent.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use planter_core::{project::Project, task::Task};
+    ///
+    /// let mut project = Project::new("World domination");
+    /// let a = project.add_task(Task::new("Build an army"));
+    /// let b = project.add_task(Task::new("Train troops"));
+    /// let c = project.add_sibling_after(Task::new("Gather allies"), a);
+    ///
+    /// let ids: Vec<_> = project.tasks().map(|t| t.id()).collect();
+    /// assert_eq!(ids, vec![a, c, b]);
+    /// ```
+    pub fn add_sibling_after(&mut self, task: Task, sibling_id: Uuid) -> Uuid {
+        let id = task.id();
+        self.tasks.insert(id, task);
+        if let Some(pos) = self.task_order.iter().position(|&t| t == sibling_id) {
+            self.task_order.insert(pos + 1, id);
+        } else {
+            self.task_order.push(id);
+        }
+        if let Some(&parent_id) = self.parent_of.get(&sibling_id) {
+            self.parent_of.insert(id, parent_id);
+            self.children.entry(parent_id).or_default().push(id);
+        }
+        id
+    }
+
     /// Deletes a task and all references to it from the project.
     ///
     /// # Arguments
@@ -510,6 +572,14 @@ impl Project {
                 RelDir::Predecessors => (i, task_id),
                 RelDir::Successors => (task_id, i),
             };
+            if self.is_ancestor(pred, succ) || self.is_ancestor(succ, pred) {
+                for &(p, s) in &added {
+                    self.remove_one_edge(p, s);
+                }
+                bail!(
+                    "Cannot add a predecessor/successor relationship between an ancestor and a descendant"
+                );
+            }
             if self.would_cycle(succ, pred) {
                 for &(p, s) in &added {
                     self.remove_one_edge(p, s);
@@ -529,6 +599,32 @@ impl Project {
         }
 
         Ok(())
+    }
+
+    /// Moves `id` right after `after_id` in the global task order, affecting display order.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use planter_core::{project::Project, task::Task};
+    ///
+    /// let mut project = Project::new("World domination");
+    /// let a = project.add_task(Task::new("Build an army"));
+    /// let b = project.add_task(Task::new("Train troops"));
+    /// let c = project.add_task(Task::new("Gather allies"));
+    /// project.move_task_after(c, a);
+    ///
+    /// let ids: Vec<_> = project.tasks().map(|t| t.id()).collect();
+    /// assert_eq!(ids, vec![a, c, b]);
+    /// ```
+    pub fn move_task_after(&mut self, id: Uuid, after_id: Uuid) {
+        let id_pos = self.task_order.iter().position(|&t| t == id);
+        let after_pos = self.task_order.iter().position(|&t| t == after_id);
+        if let (Some(ip), Some(ap)) = (id_pos, after_pos) {
+            self.task_order.remove(ip);
+            let insert_at = if ap > ip { ap } else { ap + 1 };
+            self.task_order.insert(insert_at, id);
+        }
     }
 
     /// Adds a subtask to a given task, marking the child as a component of the parent.
@@ -561,12 +657,90 @@ impl Project {
         if !self.tasks.contains_key(&parent_id) || !self.tasks.contains_key(&child_id) {
             bail!("Task not found");
         }
+        if parent_id == child_id {
+            bail!("A task cannot be a subtask of itself");
+        }
+        // No-op if already a child of this parent.
+        if self.parent_of.get(&child_id) == Some(&parent_id) {
+            return Ok(());
+        }
+        // Reject if parent is already a descendant of child (cycle).
+        let mut current = parent_id;
+        while let Some(&ancestor) = self.parent_of.get(&current) {
+            if ancestor == child_id {
+                bail!("Cannot make a task a subtask of one of its own descendants");
+            }
+            current = ancestor;
+        }
+        // Remove from any existing parent first.
+        if let Some(old_parent) = self.parent_of.remove(&child_id) {
+            if let Some(children) = self.children.get_mut(&old_parent) {
+                children.retain(|c| *c != child_id);
+                if children.is_empty() {
+                    self.children.remove(&old_parent);
+                }
+            }
+        }
         self.children
             .entry(parent_id)
             .or_default()
             .push(child_id);
         self.parent_of.insert(child_id, parent_id);
         Ok(())
+    }
+
+    /// Removes a subtask relationship, promoting the child back to a top-level task.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the task is not a subtask.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use planter_core::{project::Project, task::Task};
+    ///
+    /// let mut project = Project::new("World domination");
+    /// let army = project.add_task(Task::new("Build an army"));
+    /// let supplies = project.add_task(Task::new("Gather supplies"));
+    /// project.add_subtask(army, supplies).unwrap();
+    /// assert!(project.task_parent(supplies).is_some());
+    ///
+    /// project.remove_subtask(supplies).unwrap();
+    /// assert!(project.task_parent(supplies).is_none());
+    /// ```
+    pub fn remove_subtask(&mut self, child_id: Uuid) -> anyhow::Result<()> {
+        let parent = self
+            .parent_of
+            .remove(&child_id)
+            .context("Task is not a subtask")?;
+        if let Some(children) = self.children.get_mut(&parent) {
+            children.retain(|c| *c != child_id);
+            if children.is_empty() {
+                self.children.remove(&parent);
+            }
+        }
+        Ok(())
+    }
+
+    /// Returns the parent [`Uuid`] of a subtask, or `None` if the task is at root level.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use planter_core::{project::Project, task::Task};
+    ///
+    /// let mut project = Project::new("World domination");
+    /// let army = project.add_task(Task::new("Build an army"));
+    /// let supplies = project.add_task(Task::new("Gather supplies"));
+    ///
+    /// assert!(project.task_parent(supplies).is_none());
+    ///
+    /// project.add_subtask(army, supplies).unwrap();
+    /// assert_eq!(project.task_parent(supplies), Some(army));
+    /// ```
+    pub fn task_parent(&self, child_id: Uuid) -> Option<Uuid> {
+        self.parent_of.get(&child_id).copied()
     }
 
     /// Gets the [`Uuid`]s of all subtasks of the given task.
@@ -590,6 +764,54 @@ impl Project {
             .into_iter()
             .flatten()
             .copied()
+    }
+
+    /// Expands the parent's start/finish dates to encompass all children.
+    /// Only ever expands outward — never contracts.
+    /// Has no effect if no child has start/finish dates.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use chrono::Utc;
+    /// use planter_core::{project::Project, task::Task};
+    ///
+    /// let mut project = Project::new("World domination");
+    /// let army = project.add_task(Task::new("Build an army"));
+    /// let supplies = project.add_task(Task::new("Gather supplies"));
+    /// project.add_subtask(army, supplies).unwrap();
+    ///
+    /// let now = Utc::now();
+    /// project.task_mut(supplies).unwrap().edit_start(now).unwrap();
+    /// project.sync_parent_dates(army);
+    ///
+    /// assert_eq!(project.task(army).unwrap().start(), Some(now));
+    /// ```
+    pub fn sync_parent_dates(&mut self, parent_id: Uuid) {
+        let earliest_start = self
+            .subtasks(parent_id)
+            .filter_map(|child_id| self.task(child_id).and_then(|t| t.start()))
+            .min();
+        let latest_finish = self
+            .subtasks(parent_id)
+            .filter_map(|child_id| self.task(child_id).and_then(|t| t.finish()))
+            .max();
+
+        if earliest_start.is_none() && latest_finish.is_none() {
+            return;
+        }
+
+        let parent = self.task_mut(parent_id).unwrap();
+        if let Some(start) = earliest_start {
+            if parent.start().map_or(true, |ps| start < ps) {
+                let _ = parent.edit_start(start);
+            }
+        }
+        if let Some(finish) = latest_finish {
+            if parent.finish().map_or(true, |pf| finish > pf) {
+                let _ = parent.edit_finish(finish);
+            }
+        }
     }
 
     /// Returns the start date of the project.
@@ -885,7 +1107,21 @@ impl Project {
         }
     }
 
-    // --- internal helpers ---
+    /// Returns `true` if `ancestor_id` is an ancestor of `descendant_id` in the task tree.
+    fn is_ancestor(&self, ancestor_id: Uuid, descendant_id: Uuid) -> bool {
+        let mut seen = HashSet::new();
+        let mut current = descendant_id;
+        while let Some(parent) = self.task_parent(current) {
+            if !seen.insert(parent) {
+                break;
+            }
+            if parent == ancestor_id {
+                return true;
+            }
+            current = parent;
+        }
+        false
+    }
 
     /// BFS from `from` following successors. Returns `true` if `to` is reachable.
     fn would_cycle(&self, from: Uuid, to: Uuid) -> bool {
@@ -995,6 +1231,7 @@ mod tests {
     use proptest::prelude::*;
     use rand::{rng, RngExt};
 
+    use chrono::Utc;
     use uuid::Uuid;
 
     use crate::{
@@ -1517,5 +1754,176 @@ mod tests {
         assert!(project
             .add_time_relationship(task, fake, TimeRelationship::FinishToStart)
             .is_err());
+    }
+
+    #[test]
+    fn add_sibling_before_falls_back_to_end_when_sibling_not_found() {
+        let mut project = Project::new("World domination");
+        let a = project.add_task(Task::new("Build an army"));
+        let fake = Uuid::new_v4();
+        let b = project.add_sibling_before(Task::new("Train troops"), fake);
+
+        let ids: Vec<Uuid> = project.tasks().map(|t| t.id()).collect();
+        assert_eq!(ids, vec![a, b]);
+    }
+
+    #[test]
+    fn move_task_after_is_noop_for_nonexistent_ids() {
+        let mut project = Project::new("World domination");
+        let a = project.add_task(Task::new("Build an army"));
+        let b = project.add_task(Task::new("Train troops"));
+        let fake = Uuid::new_v4();
+
+        project.move_task_after(fake, a);
+        assert_eq!(
+            project.tasks().map(|t| t.id()).collect::<Vec<_>>(),
+            vec![a, b]
+        );
+
+        project.move_task_after(a, fake);
+        assert_eq!(
+            project.tasks().map(|t| t.id()).collect::<Vec<_>>(),
+            vec![a, b]
+        );
+    }
+
+    #[test]
+    fn remove_subtask_rejects_non_subtask() {
+        let mut project = Project::new("World domination");
+        let task = project.add_task(Task::new("Do something"));
+        assert!(project.remove_subtask(task).is_err());
+    }
+
+    proptest! {
+        #[test]
+        fn add_sibling_before_inserts_correctly(mut project in project_strategy()) {
+            let ids = task_ids(&project);
+            if ids.len() < 2 { return Ok(()); }
+            let mut rng = rand::rng();
+            let idx = rng.random_range(0..ids.len());
+
+            let sibling_id = ids[idx];
+            let new_id = project.add_sibling_before(Task::new("Minion"), sibling_id);
+
+            let ordered_ids: Vec<Uuid> = project.tasks().map(|t| t.id()).collect();
+            let new_pos = ordered_ids.iter().position(|&id| id == new_id).unwrap();
+            let sibling_pos = ordered_ids.iter().position(|&id| id == sibling_id).unwrap();
+            assert_eq!(new_pos, sibling_pos - 1);
+        }
+
+        #[test]
+        fn add_sibling_after_inserts_correctly(mut project in project_strategy()) {
+            let ids = task_ids(&project);
+            if ids.len() < 2 { return Ok(()); }
+            let mut rng = rand::rng();
+            let idx = rng.random_range(0..ids.len());
+
+            let sibling_id = ids[idx];
+            let new_id = project.add_sibling_after(Task::new("Minion"), sibling_id);
+
+            let ordered_ids: Vec<Uuid> = project.tasks().map(|t| t.id()).collect();
+            let new_pos = ordered_ids.iter().position(|&id| id == new_id).unwrap();
+            let sibling_pos = ordered_ids.iter().position(|&id| id == sibling_id).unwrap();
+            assert_eq!(new_pos, sibling_pos + 1);
+        }
+
+        #[test]
+        fn add_sibling_inherits_parent(mut project in project_strategy()) {
+            let ids = task_ids(&project);
+            if ids.len() < 3 { return Ok(()); }
+            let mut rng = rand::rng();
+            let parent_idx = rng.random_range(0..ids.len());
+            let child_idx = rng.random_range(0..ids.len());
+            if parent_idx == child_idx { return Ok(()); }
+
+            project.add_subtask(ids[parent_idx], ids[child_idx]).unwrap();
+            let new_id = project.add_sibling_before(Task::new("Minion"), ids[child_idx]);
+
+            assert_eq!(project.task_parent(new_id), Some(ids[parent_idx]));
+            let children: Vec<Uuid> = project.subtasks(ids[parent_idx]).collect();
+            assert!(children.contains(&new_id));
+        }
+
+        #[test]
+        fn move_task_after_reorders_correctly(mut project in project_strategy()) {
+            let ids = task_ids(&project);
+            if ids.len() < 3 { return Ok(()); }
+            let mut rng = rand::rng();
+            let idx = rng.random_range(0..ids.len());
+            let mut after_idx = rng.random_range(0..ids.len());
+            while after_idx == idx {
+                after_idx = rng.random_range(0..ids.len());
+            }
+
+            project.move_task_after(ids[idx], ids[after_idx]);
+            let new_ids: Vec<Uuid> = project.tasks().map(|t| t.id()).collect();
+
+            let task_pos = new_ids.iter().position(|&id| id == ids[idx]).unwrap();
+            let after_pos = new_ids.iter().position(|&id| id == ids[after_idx]).unwrap();
+            assert_eq!(task_pos, after_pos + 1);
+        }
+
+        #[test]
+        fn remove_subtask_promotes_to_top_level(mut project in project_strategy()) {
+            let ids = task_ids(&project);
+            if ids.len() < 2 { return Ok(()); }
+            let mut rng = rand::rng();
+            let parent_idx = rng.random_range(0..ids.len());
+            let child_idx = rng.random_range(0..ids.len());
+            if parent_idx == child_idx { return Ok(()); }
+
+            project.add_subtask(ids[parent_idx], ids[child_idx]).unwrap();
+            assert!(project.task_parent(ids[child_idx]).is_some());
+            project.remove_subtask(ids[child_idx]).unwrap();
+
+            assert!(project.task_parent(ids[child_idx]).is_none());
+            assert!(project.subtasks(ids[parent_idx]).next().is_none());
+        }
+
+        #[test]
+        fn sync_parent_dates_expands_to_children(
+            mut project in project_strategy(),
+            start_offset in 0..1_000_000i64,
+            finish_offset in 0..1_000_000i64,
+        ) {
+            let ids = task_ids(&project);
+            if ids.len() < 3 { return Ok(()); }
+            let mut rng = rand::rng();
+            let parent_idx = rng.random_range(0..ids.len());
+            let child1_idx = rng.random_range(0..ids.len());
+            let child2_idx = rng.random_range(0..ids.len());
+            if child1_idx == parent_idx || child2_idx == parent_idx || child1_idx == child2_idx {
+                return Ok(());
+            }
+
+            project.add_subtask(ids[parent_idx], ids[child1_idx]).unwrap();
+            project.add_subtask(ids[parent_idx], ids[child2_idx]).unwrap();
+
+            let now = Utc::now();
+            let child1_start = now - chrono::Duration::milliseconds(start_offset);
+            let child2_finish = now + chrono::Duration::milliseconds(finish_offset);
+            project.task_mut(ids[child1_idx]).unwrap().edit_start(child1_start).unwrap();
+            project.task_mut(ids[child2_idx]).unwrap().edit_finish(child2_finish).unwrap();
+
+            project.sync_parent_dates(ids[parent_idx]);
+
+            assert_eq!(project.task(ids[parent_idx]).unwrap().start(), Some(child1_start));
+            assert_eq!(project.task(ids[parent_idx]).unwrap().finish(), Some(child2_finish));
+        }
+    }
+
+    #[test]
+    fn sync_parent_dates_noop_when_children_have_no_dates() {
+        let mut project = Project::new("World domination");
+        let army = project.add_task(Task::new("Build an army"));
+        let supplies = project.add_task(Task::new("Gather supplies"));
+        project.add_subtask(army, supplies).unwrap();
+
+        let now = Utc::now();
+        project.task_mut(army).unwrap().edit_start(now).unwrap();
+
+        project.sync_parent_dates(army);
+        assert_eq!(project.task(army).unwrap().start(), Some(now));
+        assert!(project.task(army).unwrap().finish().is_none());
     }
 }

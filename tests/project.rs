@@ -98,5 +98,34 @@ fn test_project() -> anyhow::Result<()> {
     });
     assert_eq!(project.stakeholders().len(), 2);
 
+    assert_eq!(project.task_parent(software_id), Some(stimpack_id));
+    assert!(project.task_parent(crowbar_id).is_none());
+
+    project.remove_subtask(software_id)?;
+    assert!(project.task_parent(software_id).is_none());
+    assert_eq!(project.subtasks(stimpack_id).count(), 1);
+
+    project.add_subtask(stimpack_id, software_id)?;
+    assert_eq!(project.subtasks(stimpack_id).count(), 2);
+
+    let sibling = project.add_sibling_before(Task::new("Sibling before"), profit_id);
+    let order: Vec<_> = project.tasks().map(|t| t.id()).collect();
+    assert!(
+        order.iter().position(|&id| id == sibling).unwrap()
+            < order.iter().position(|&id| id == profit_id).unwrap()
+    );
+
+    project.move_task_after(profit_id, crowbar_id);
+    let order: Vec<_> = project.tasks().map(|t| t.id()).collect();
+    assert_eq!(
+        order.iter().position(|&id| id == profit_id).unwrap(),
+        order.iter().position(|&id| id == crowbar_id).unwrap() + 1
+    );
+
+    let now = Utc::now();
+    project.task_mut(prey_id).unwrap().edit_start(now)?;
+    project.sync_parent_dates(stimpack_id);
+    assert_eq!(project.task(stimpack_id).unwrap().start(), Some(now));
+
     Ok(())
 }
