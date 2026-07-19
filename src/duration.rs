@@ -91,6 +91,23 @@ impl FromStr for NonNegativeDuration {
     }
 }
 
+#[cfg(feature = "serde")]
+impl Serialize for NonNegativeDuration {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> Deserialize<'de> for NonNegativeDuration {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[allow(unused_imports)]
+        use Deserialize as _;
+        let s = String::deserialize(deserializer)?;
+        s.parse().map_err(de::Error::custom)
+    }
+}
+
 #[cfg(test)]
 /// Utilities to test with duration.
 pub mod test_utils {

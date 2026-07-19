@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 /// A task is a unit of work that can be completed by a person or a group of people.
 /// It can be assigned resources and can have a start, finish, and duration.
 pub struct Task {

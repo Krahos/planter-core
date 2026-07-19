@@ -13,6 +13,7 @@ use crate::{
 };
 
 #[derive(Debug, Default, Builder)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[builder(on(String, into))]
 /// Represents a project with a name and a list of resources.
 pub struct Project {
@@ -49,6 +50,7 @@ pub struct Project {
 }
 
 #[derive(Debug, Default, Clone, Copy)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 /// The predecessor - successor relationship between tasks.
 pub enum TimeRelationship {
     /// The predecessor has to start for the successor to finish.
@@ -63,6 +65,7 @@ pub enum TimeRelationship {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 /// The direction of a relationship update.
 pub enum RelDir {
     /// Update the predecessors of a task.

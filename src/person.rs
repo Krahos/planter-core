@@ -18,10 +18,21 @@ pub struct Person {
     phone: Option<PhoneNumber>,
 }
 
-#[nutype(
-    sanitize(trim),
-    validate(not_empty, len_char_max = NAME_LEN),
-    derive(Debug, Eq, PartialEq, Clone, Display, Deref)
+#[cfg_attr(
+    feature = "serde",
+    nutype(
+        sanitize(trim),
+        validate(not_empty, len_char_max = NAME_LEN),
+        derive(Debug, Eq, PartialEq, Clone, Display, Deref, Serialize, Deserialize),
+    )
+)]
+#[cfg_attr(
+    not(feature = "serde"),
+    nutype(
+        sanitize(trim),
+        validate(not_empty, len_char_max = NAME_LEN),
+        derive(Debug, Eq, PartialEq, Clone, Display, Deref),
+    )
 )]
 pub struct NameString(String);
 
@@ -254,6 +265,59 @@ impl Person {
         self.last_name =
             NameString::try_new(name).context("Input can't be converted into NameString.")?;
         Ok(())
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for Person {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        let mut s = serializer.serialize_struct("Person", 4)?;
+        s.serialize_field("first_name", &*self.first_name)?;
+        s.serialize_field("last_name", &*self.last_name)?;
+        s.serialize_field(
+            "email",
+            &self.email.as_ref().map(std::string::ToString::to_string),
+        )?;
+        s.serialize_field(
+            "phone",
+            &self.phone.as_ref().map(std::string::ToString::to_string),
+        )?;
+        s.end()
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Person {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        use serde::de;
+        use std::str::FromStr;
+
+        #[derive(serde::Deserialize)]
+        struct Helper {
+            first_name: String,
+            last_name: String,
+            email: Option<String>,
+            phone: Option<String>,
+        }
+
+        let helper = Helper::deserialize(deserializer)?;
+        let first_name =
+            NameString::try_new(helper.first_name).map_err(de::Error::custom)?;
+        let last_name =
+            NameString::try_new(helper.last_name).map_err(de::Error::custom)?;
+        let email = helper
+            .email
+            .and_then(|e| email_address::EmailAddress::from_str(&e).ok());
+        let phone = helper
+            .phone
+            .and_then(|p| phonenumber::PhoneNumber::from_str(&p).ok());
+        Ok(Person {
+            first_name,
+            last_name,
+            email,
+            phone,
+        })
     }
 }
 
