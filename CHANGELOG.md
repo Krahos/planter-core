@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.6](https://github.com/Krahos/planter-core/compare/v0.0.5...v0.0.6) - 2026-07-26
+
+### Added
+
+- serde (de)serialization ([#16](https://github.com/Krahos/planter-core/pull/16))
+
+### Other
+
+- *(deps)* bump actions/checkout from 5 to 7 ([#17](https://github.com/Krahos/planter-core/pull/17))
+
 ## [0.0.5](https://github.com/Krahos/planter-core/compare/v0.0.4...v0.0.5) - 2026-07-04
 
 ### Added
