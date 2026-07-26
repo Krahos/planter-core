@@ -302,16 +302,18 @@ impl<'de> serde::Deserialize<'de> for Person {
         }
 
         let helper = Helper::deserialize(deserializer)?;
-        let first_name =
-            NameString::try_new(helper.first_name).map_err(de::Error::custom)?;
-        let last_name =
-            NameString::try_new(helper.last_name).map_err(de::Error::custom)?;
+        let first_name = NameString::try_new(helper.first_name).map_err(de::Error::custom)?;
+        let last_name = NameString::try_new(helper.last_name).map_err(de::Error::custom)?;
         let email = helper
             .email
-            .and_then(|e| email_address::EmailAddress::from_str(&e).ok());
+            .map(|e| email_address::EmailAddress::from_str(&e))
+            .transpose()
+            .map_err(de::Error::custom)?;
         let phone = helper
             .phone
-            .and_then(|p| phonenumber::PhoneNumber::from_str(&p).ok());
+            .map(|p| phonenumber::PhoneNumber::from_str(&p))
+            .transpose()
+            .map_err(de::Error::custom)?;
         Ok(Person {
             first_name,
             last_name,
@@ -328,7 +330,9 @@ pub mod test_utils {
 
     use email_address::EmailAddress;
     use phonenumber::PhoneNumber;
-    use proptest::prelude::Strategy;
+    use proptest::prelude::*;
+
+    use crate::person::Person;
 
     /// Generate a random email address.
     pub fn email() -> impl Strategy<Value = EmailAddress> {
@@ -344,6 +348,26 @@ pub mod test_utils {
     /// Generate a random valid name string (1-50 alpha chars).
     pub fn valid_name() -> impl Strategy<Value = String> {
         "[a-zA-Z]{1,50}"
+    }
+
+    /// Generate a random `Person` with optional email and phone.
+    pub fn person() -> impl Strategy<Value = Person> {
+        (
+            valid_name(),
+            valid_name(),
+            prop::option::of(email()),
+            prop::option::of(phone_number()),
+        )
+            .prop_map(|(first, last, email, phone)| {
+                let mut p = Person::new(first, last).unwrap();
+                if let Some(e) = email {
+                    p.update_email(e);
+                }
+                if let Some(ph) = phone {
+                    p.update_phone(ph);
+                }
+                p
+            })
     }
 }
 
@@ -414,6 +438,23 @@ mod tests {
         fn update_last_name_rejects_invalid(name in valid_name(), bad in "[a-zA-Z]{51,100}") {
             let mut person = Person::new(&name, "valid").unwrap();
             assert!(person.update_last_name(&bad).is_err());
+        }
+    }
+}
+
+#[cfg(all(test, feature = "serde"))]
+mod serde_tests {
+    use proptest::prelude::*;
+
+    use crate::person::Person;
+    use crate::person::test_utils::person;
+
+    proptest! {
+        #[test]
+        fn serde_roundtrip(p in person()) {
+            let json = serde_json::to_string(&p).unwrap();
+            let deserialized: Person = serde_json::from_str(&json).unwrap();
+            assert_eq!(p, deserialized);
         }
     }
 }

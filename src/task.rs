@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 /// A task is a unit of work that can be completed by a person or a group of people.
 /// It can be assigned resources and can have a start, finish, and duration.
 pub struct Task {
@@ -647,6 +647,26 @@ mod tests {
             task.edit_finish(finish).unwrap();
             task.edit_duration(duration);
             assert_eq!(task.start(), Some(finish - *duration));
+        }
+    }
+}
+
+#[cfg(all(test, feature = "serde"))]
+mod serde_tests {
+    use proptest::prelude::*;
+
+    use crate::task::Task;
+    use crate::task::test_utils::task_strategy;
+
+    proptest! {
+        #[test]
+        fn serde_roundtrip(task in task_strategy()) {
+            let json = serde_json::to_string(&task).unwrap();
+            let deserialized: Task = serde_json::from_str(&json).unwrap();
+            let json2 = serde_json::to_string(&deserialized).unwrap();
+            let v1: serde_json::Value = serde_json::from_str(&json).unwrap();
+            let v2: serde_json::Value = serde_json::from_str(&json2).unwrap();
+            assert_eq!(v1, v2, "serde roundtrip must produce equivalent JSON");
         }
     }
 }

@@ -13,7 +13,7 @@ use crate::{
 };
 
 #[derive(Debug, Default, Builder)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[builder(on(String, into))]
 /// Represents a project with a name and a list of resources.
 pub struct Project {
@@ -1952,5 +1952,25 @@ mod tests {
         project.sync_parent_dates(army).unwrap();
         assert_eq!(project.task(army).unwrap().start(), Some(now));
         assert!(project.task(army).unwrap().finish().is_none());
+    }
+}
+
+#[cfg(all(test, feature = "serde"))]
+mod serde_tests {
+    use proptest::prelude::*;
+
+    use crate::project::Project;
+    use crate::project::test_utils::project_strategy;
+
+    proptest! {
+        #[test]
+        fn serde_roundtrip(p in project_strategy()) {
+            let json = serde_json::to_string(&p).unwrap();
+            let deserialized: Project = serde_json::from_str(&json).unwrap();
+            let json2 = serde_json::to_string(&deserialized).unwrap();
+            let v1: serde_json::Value = serde_json::from_str(&json).unwrap();
+            let v2: serde_json::Value = serde_json::from_str(&json2).unwrap();
+            assert_eq!(v1, v2, "serde roundtrip must produce equivalent JSON");
+        }
     }
 }

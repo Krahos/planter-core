@@ -1,7 +1,7 @@
 use crate::person::Person;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 /// Represents a resource that can be used in a project. A resource can be either a material or personnel.
 pub enum Resource {
     /// Represents a material resource that can be used in a project.
@@ -16,7 +16,7 @@ pub enum Resource {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 /// Represents a material resource that can be used in a project.
 /// It can be either consumable or non-consumable.
 pub enum Material {
@@ -27,7 +27,7 @@ pub enum Material {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 /// Represents a consumable material resource that can be used in a project.
 pub struct Consumable {
     /// Name of the consumable material.
@@ -39,7 +39,7 @@ pub struct Consumable {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 /// Represents a non-consumable material resource that can be used in a project.
 pub struct NonConsumable {
     /// Name of the non-consumable material.
