@@ -7,6 +7,12 @@ use regex::Regex;
 use std::sync::LazyLock;
 use thiserror::Error;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+#[cfg(feature = "serde")]
+use serde::de;
+
 /// A duration is a unit of time that represents the amount of time required to complete a task.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct NonNegativeDuration(Duration);
@@ -91,14 +97,36 @@ impl FromStr for NonNegativeDuration {
     }
 }
 
+#[cfg(feature = "serde")]
+impl Serialize for NonNegativeDuration {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> Deserialize<'de> for NonNegativeDuration {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        s.parse().map_err(de::Error::custom)
+    }
+}
+
 #[cfg(test)]
 /// Utilities to test with duration.
 pub mod test_utils {
     use proptest::prelude::Strategy;
 
+    use super::NonNegativeDuration;
+
     /// Generate a random duration string.
     pub fn duration_string() -> impl Strategy<Value = String> {
         r"[0-9]{1,12} h"
+    }
+
+    /// Generate a random `NonNegativeDuration`.
+    pub fn non_negative_duration() -> impl Strategy<Value = NonNegativeDuration> {
+        duration_string().prop_map(|s| NonNegativeDuration::parse_from_str(&s).unwrap())
     }
 }
 
@@ -121,6 +149,22 @@ mod tests {
             if !DURATION_RE.is_match(&s) {
                 assert!(NonNegativeDuration::parse_from_str(&s).is_err())
             }
+        }
+    }
+}
+
+#[cfg(all(test, feature = "serde"))]
+mod serde_tests {
+    use proptest::prelude::*;
+
+    use super::NonNegativeDuration;
+
+    proptest! {
+        #[test]
+        fn serde_roundtrip(d in crate::duration::test_utils::non_negative_duration()) {
+            let json = serde_json::to_string(&d).unwrap();
+            let deserialized: NonNegativeDuration = serde_json::from_str(&json).unwrap();
+            assert_eq!(d, deserialized);
         }
     }
 }

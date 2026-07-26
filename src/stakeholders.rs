@@ -1,6 +1,7 @@
 use crate::person::Person;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 /// Stakeholders are all those individuals, organizations or entities who have an interest in the project.
 /// Their interest could be constructive or destructive.
 pub enum Stakeholder {

@@ -18,10 +18,21 @@ pub struct Person {
     phone: Option<PhoneNumber>,
 }
 
-#[nutype(
-    sanitize(trim),
-    validate(not_empty, len_char_max = NAME_LEN),
-    derive(Debug, Eq, PartialEq, Clone, Display, Deref)
+#[cfg_attr(
+    feature = "serde",
+    nutype(
+        sanitize(trim),
+        validate(not_empty, len_char_max = NAME_LEN),
+        derive(Debug, Eq, PartialEq, Clone, Display, Deref, Serialize, Deserialize),
+    )
+)]
+#[cfg_attr(
+    not(feature = "serde"),
+    nutype(
+        sanitize(trim),
+        validate(not_empty, len_char_max = NAME_LEN),
+        derive(Debug, Eq, PartialEq, Clone, Display, Deref),
+    )
 )]
 pub struct NameString(String);
 
@@ -257,6 +268,61 @@ impl Person {
     }
 }
 
+#[cfg(feature = "serde")]
+impl serde::Serialize for Person {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        let mut s = serializer.serialize_struct("Person", 4)?;
+        s.serialize_field("first_name", &*self.first_name)?;
+        s.serialize_field("last_name", &*self.last_name)?;
+        s.serialize_field(
+            "email",
+            &self.email.as_ref().map(std::string::ToString::to_string),
+        )?;
+        s.serialize_field(
+            "phone",
+            &self.phone.as_ref().map(std::string::ToString::to_string),
+        )?;
+        s.end()
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Person {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        use serde::de;
+        use std::str::FromStr;
+
+        #[derive(serde::Deserialize)]
+        struct Helper {
+            first_name: String,
+            last_name: String,
+            email: Option<String>,
+            phone: Option<String>,
+        }
+
+        let helper = Helper::deserialize(deserializer)?;
+        let first_name = NameString::try_new(helper.first_name).map_err(de::Error::custom)?;
+        let last_name = NameString::try_new(helper.last_name).map_err(de::Error::custom)?;
+        let email = helper
+            .email
+            .map(|e| email_address::EmailAddress::from_str(&e))
+            .transpose()
+            .map_err(de::Error::custom)?;
+        let phone = helper
+            .phone
+            .map(|p| phonenumber::PhoneNumber::from_str(&p))
+            .transpose()
+            .map_err(de::Error::custom)?;
+        Ok(Person {
+            first_name,
+            last_name,
+            email,
+            phone,
+        })
+    }
+}
+
 #[cfg(test)]
 /// Test utilities for the `person` module.
 pub mod test_utils {
@@ -264,7 +330,9 @@ pub mod test_utils {
 
     use email_address::EmailAddress;
     use phonenumber::PhoneNumber;
-    use proptest::prelude::Strategy;
+    use proptest::prelude::*;
+
+    use crate::person::Person;
 
     /// Generate a random email address.
     pub fn email() -> impl Strategy<Value = EmailAddress> {
@@ -280,6 +348,26 @@ pub mod test_utils {
     /// Generate a random valid name string (1-50 alpha chars).
     pub fn valid_name() -> impl Strategy<Value = String> {
         "[a-zA-Z]{1,50}"
+    }
+
+    /// Generate a random `Person` with optional email and phone.
+    pub fn person() -> impl Strategy<Value = Person> {
+        (
+            valid_name(),
+            valid_name(),
+            prop::option::of(email()),
+            prop::option::of(phone_number()),
+        )
+            .prop_map(|(first, last, email, phone)| {
+                let mut p = Person::new(first, last).unwrap();
+                if let Some(e) = email {
+                    p.update_email(e);
+                }
+                if let Some(ph) = phone {
+                    p.update_phone(ph);
+                }
+                p
+            })
     }
 }
 
@@ -350,6 +438,23 @@ mod tests {
         fn update_last_name_rejects_invalid(name in valid_name(), bad in "[a-zA-Z]{51,100}") {
             let mut person = Person::new(&name, "valid").unwrap();
             assert!(person.update_last_name(&bad).is_err());
+        }
+    }
+}
+
+#[cfg(all(test, feature = "serde"))]
+mod serde_tests {
+    use proptest::prelude::*;
+
+    use crate::person::Person;
+    use crate::person::test_utils::person;
+
+    proptest! {
+        #[test]
+        fn serde_roundtrip(p in person()) {
+            let json = serde_json::to_string(&p).unwrap();
+            let deserialized: Person = serde_json::from_str(&json).unwrap();
+            assert_eq!(p, deserialized);
         }
     }
 }

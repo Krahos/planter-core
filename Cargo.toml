@@ -14,19 +14,25 @@ repository = "https://github.com/krahos/planter-core"
 path = "src/lib.rs"
 
 [dependencies]
-anyhow = "1.0.102"
-chrono = "0.4.45"
-uuid = { version = "1", features = ["v4"] }
-phonenumber = "0.3.9"
-regex = "1.12.4"
-thiserror = "2.0.18"
-nutype = "0.7.0"
-email_address = "0.2.9"
-bon = "3.9.3"
+anyhow = "1"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+phonenumber = "0.3"
+regex = "1.13"
+thiserror = "2"
+nutype = "0.7"
+email_address = "0.2"
+bon = "3.9"
+serde = { version = "1", features = ["derive"], optional = true }
+
+[features]
+default = []
+serde = ["dep:serde", "nutype/serde"]
 
 [dev-dependencies]
-proptest = { version = "1.11.0", features = ["proptest-macro"] }
-rand = "0.10.1"
+proptest = { version = "1.11", features = ["proptest-macro"] }
+rand = "0.10"
+serde_json = "1"
 
 [lints.rust]
 unsafe_code = "forbid"
