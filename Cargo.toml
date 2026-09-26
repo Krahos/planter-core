@@ -20,7 +20,7 @@ uuid = { version = "1", features = ["v4", "serde"] }
 phonenumber = "0.3"
 regex = "1.13"
 thiserror = "2"
-nutype = "0.7"
+nutype = "0.8"
 email_address = "0.2"
 bon = "3.9"
 serde = { version = "1", features = ["derive"], optional = true }
